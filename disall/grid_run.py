@@ -25,6 +25,13 @@ pmg_to_ase = pg_ase.AseAtomsAdaptor.get_atoms
 def run_packet(df_name, df_global, relaxer_dict, size_of_packet,
                structure_size,
                copy_calculated=None):
+    """why we shouldn't run two of these at the same time?
+    if the numbers are repeated they would be looping the same numbers flagging a job node as occupied when 
+    two run_packet shouldn't never be run at the same time so the database doesn't handle 
+    two different loops saving and loading! (only to o when a changed occured?)
+    
+    """
+
     write_log('starting packet run: attempting {} runs of size {}'.format(
         str(size_of_packet), str(structure_size)),
               log_file=df_name+'.log')
@@ -75,11 +82,42 @@ def run_packet(df_name, df_global, relaxer_dict, size_of_packet,
               log_file=df_name+'.log')
     # instead of running we check
     print(to_calculate)
+    """we need to start by creating a whole system that calculates 
+    the whole indexes 'to_calculate' 
+    by starting a pyiron project of name 'relaxer_dict['calculator_label']'
+    only when one of them passes state to calculated we added to
+    the 'calculated'. We need a higher level symbolism for these labels
+    """
+    num_jobs = 5
+    bussy_running = []
+    for i, _ in enumerate(to_calculate):
+        print(i)
+        if isinstance(df.loc[to_calculate[i], calculator_label], dict):
+            if df.loc[to_calculate[i], calculator_label]['status'] == 'running':
+                bussy += 1
+                bussy_running.append(to_calculate[i])
+            if df.loc[to_calculate[i], calculator_label]['status'] == 'done':
+                continue
+
+        else:
+            df.at[to_calculate[i], calculator_label]= {'status':'not started'}
+            print('not started/not info on {:015d}'.format(to_calculate[i]))
+            print('starting')
+
+            
+        
+  # obj.attr_name exists.df.loc[to_calculate[i], calculator_label].)
+        
+
+
+
     # ti = time.time()
     # df.loc[to_calculate, calculator_label] = df.loc[to_calculate].apply(
     #     relaxer, log_file=df_name+'.log', axis=1)
     # ti = time.time() - ti
     return
+
+
     df.attrs[calculator_label]['uncalculated'] = list(
         set(uncalculated) - set(to_calculate))
     df.attrs[calculator_label]['calculated'] += to_calculate

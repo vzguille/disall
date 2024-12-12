@@ -3,7 +3,8 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.pkl
-
+# pyiron_calculations
+vasp_0*
 
 # C extensions
 *.so
