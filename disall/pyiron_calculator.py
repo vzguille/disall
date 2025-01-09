@@ -37,14 +37,16 @@ class VASP_pyiron_calculator:
     def __init__(self,
                 input_data = INPUT_DATA,
                 project_pyiron = 'testing_project',
+                
                 ):
         self.dic_parameters = input_data
         self.project_pyiron_str = project_pyiron
 
     def vasp_pyiron_calculation(self,
-                    structure, #calculation specific
+                    structure = None, #calculation specific, only when you initiate it uses it
                     id = 0, #calculation specific
                     log_file = None, #calculation specific
+                    RE = False, # Don't delete job unless specified
                     **kwargs):
         if 'input_data' in kwargs:
             """ we can also change it in case we want to have given
@@ -52,7 +54,19 @@ class VASP_pyiron_calculator:
             dic_parameters = kwargs['input_data']
         else: 
             dic_parameters = self.dic_parameters
-        proj_pyiron = Project(path=self.project_pyiron_str)
+
+        if 'update_data' in kwargs:
+            update_data = kwargs['update_data']
+            dic_parameters.update(update_data)
+        else: 
+            pass
+
+        if 'project_name' in kwargs:
+            project_name = kwargs['project_name']
+        else: 
+            project_name = self.project_pyiron_str
+        
+        proj_pyiron = Project(path=project_name)
         
         try:
             job_function = proj_pyiron.create_job(
@@ -60,7 +74,7 @@ class VASP_pyiron_calculator:
                 job_name='vasp_{:015d}'.format(
                                     id
                                     ),
-                delete_existing_job=False)
+                delete_existing_job=RE)
                 
         except Exception as e:
             print('Exception in loading job: {}'.format(e))
@@ -83,8 +97,9 @@ class VASP_pyiron_calculator:
             return
 
         if job_function.status == 'running' or \
-                job_function.status == 'collect':
-            return
+                job_function.status == 'collect' or \
+                job_function.status == 'submitted':
+            return {'status' : job_function.status.string}
 
         if job_function.status == 'finished' or job_function.status == 'aborted' \
                 or job_function.status == 'not_converged' or \
@@ -97,7 +112,7 @@ class VASP_pyiron_calculator:
                 any other automatic updating has to be done outside in the loop
                 """
                 print(e)
-                return False
+                return {'status': job_function.status.string, 'error': e}
 
                 #     err_count = self._fail(job_function, it_in_rooster, e)
                 #     if err_count >= 5:
@@ -185,3 +200,15 @@ def _get_dft_results_pyiron(job_func):
                 j.to_ase().copy() for j in job_func.trajectory()],
             'energy_electronic_step': job_func[
                 'output/generic/dft/scf_energy_int'].copy()}
+
+
+
+def update_failed_job(project_name='testing_project', id = 0, try_no = 0):
+    
+    proj_pyiron = Project(path=project_name)
+    job = proj_pyiron.load('vasp_{:015d}'.format(
+                                    id
+                                    ))
+    job.copy_to(new_job_name=job.name + '_err_{:02}'.format(try_no - 1), 
+                    copy_files=True, 
+                    new_database_entry=False)
