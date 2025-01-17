@@ -1,10 +1,23 @@
 import os
+
+
+
+
+
 from pyiron import Project
 from pyiron import ase_to_pyiron
 
 from pymatgen.analysis.magnetism import CollinearMagneticStructureAnalyzer
 from pymatgen.io.vasp.inputs import Kpoints
-from pymatgen.io import ase as pgase
+
+
+
+
+from .slurm import squeue_check
+
+from pymatgen.io import ase
+
+ase_to_pmg = ase.AseAtomsAdaptor.get_structure
 
 """how to call the calculator
     pw_calc = PW_calculator()
@@ -46,7 +59,8 @@ class VASP_pyiron_calculator:
                     structure = None, #calculation specific, only when you initiate it uses it
                     id = 0, #calculation specific
                     log_file = None, #calculation specific
-                    RE = False, # Don't delete job unless specified
+                    RE = False, # Don't delete job unless specified,
+                    return_job = False,
                     **kwargs):
         if 'input_data' in kwargs:
             """ we can also change it in case we want to have given
@@ -94,25 +108,46 @@ class VASP_pyiron_calculator:
             # actually run it
             _relax_blank(
                 job_function, dic_parameters)
+            if return_job:
+                return job_function
             return
 
         if job_function.status == 'running' or \
                 job_function.status == 'collect' or \
                 job_function.status == 'submitted':
-            return {'status' : job_function.status.string}
+            #check if it's actually running
+            status_slurm = squeue_check(job_function['server']['qid'])
+            if status_slurm == 'PENDING' or status_slurm == 'RUNNING':
+                if return_job:
+                    return job_function
+                return {'status' : 'running',
+                        'status_pyiron' : job_function.status.string}
+            else:
+                job_function.drop_status_to_aborted()
+                # pyiron status immediately changes to aborted
+                if return_job:
+                    return job_function
+                return {'status' : 'timed_out',
+                        'status_pyiron' : job_function.status.string}
 
         if job_function.status == 'finished' or job_function.status == 'aborted' \
                 or job_function.status == 'not_converged' or \
                 job_function.status == 'warning':
             try:
+                print('trying')
                 """ when it succeds parsing the results"""
-                return _get_dft_results_pyiron(job_function)
+                if return_job:
+                    return _get_dft_results_pyiron(job_function, return_job = return_job)
+                else:
+                    return _get_dft_results_pyiron(job_function)
             except Exception as e:
                 """ when it fails it returns a False (this is important for the standalone relaxer),
                 any other automatic updating has to be done outside in the loop
                 """
                 print(e)
-                return {'status': job_function.status.string, 'error': e}
+                return {'status':'failed',
+                        'status_pyiron': job_function.status.string,
+                        'error': e}
 
                 #     err_count = self._fail(job_function, it_in_rooster, e)
                 #     if err_count >= 5:
@@ -122,6 +157,8 @@ class VASP_pyiron_calculator:
                 #             jobs, i, it_in_rooster, proj_pyiron, err_count)
                 #         continue
                 # finished worked
+            if return_job:
+                return job_function
             return
 def _relax_blank(job, dic_parameters):
     for key, value in dic_parameters.items():
@@ -131,8 +168,9 @@ def _relax_blank(job, dic_parameters):
     if '-INCAR-ISPIN' in dic_parameters.keys():
         if dic_parameters['-INCAR-ISPIN'] == 2:
             # if 'Fe',' Ni' in job.structure set ISPIN 1 and break
-            obj_magmoms = CollinearMagneticStructureAnalyzer(ase_to_pmg(job.structure),
-                                                            'replace_all')
+            obj_magmoms = CollinearMagneticStructureAnalyzer(
+                ase_to_pmg(job.structure),
+                'replace_all')
             job.structure.set_initial_magnetic_moments(
                 obj_magmoms.magmoms)
     
@@ -171,7 +209,7 @@ def _relax_blank(job, dic_parameters):
         else:
             job.k_mesh_spacing = dic_parameters['k_mesh']
     else:
-        work_str = Kpoints().automatic_density(pgase.AseAtomsAdaptor.get_structure(
+        work_str = Kpoints().automatic_density(ase_to_pmg(
             job.structure), kppa=KPPA)
         
         print('KPOINTS file')
@@ -188,18 +226,25 @@ def _relax_blank(job, dic_parameters):
     job.run()
     if os.path.exists('KPOINTS'):
         os.remove('KPOINTS')
+    
 
-def _get_dft_results_pyiron(job_func):
-    return {'job_name': job_func.job_name,
-            'status': job_func.status.string,
-            'energy_traj': job_func['output/generic/energy_pot'].copy(),
-            'force_traj': job_func['output/generic/forces'].copy(),
-            'stress_traj': job_func['output/generic/stresses'].copy(),
-            
-            'structures_traj': [
-                j.to_ase().copy() for j in job_func.trajectory()],
-            'energy_electronic_step': job_func[
-                'output/generic/dft/scf_energy_int'].copy()}
+def _get_dft_results_pyiron(job_func, return_job = False):
+    if return_job:
+        return job_func
+    else:
+        status_pyiron = job_func.status.string
+        
+        return {'job_name': job_func.job_name,
+                'status': 'finalized',
+                'status_pyiron': job_func.status.string,
+                'energy_traj': job_func['output/generic/energy_pot'].copy(), # in eV
+                'force_traj': job_func['output/generic/forces'].copy(), # in eV/A
+                'stress_traj': job_func['output/generic/stresses'].copy(), # in eV/A2, MatGL uses GPa
+                
+                'structures_traj': [
+                    j.to_ase().copy() for j in job_func.trajectory()],
+                'energy_electronic_step': job_func[
+                    'output/generic/dft/scf_energy_int'].copy()}
 
 
 

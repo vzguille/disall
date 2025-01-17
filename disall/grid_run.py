@@ -6,6 +6,7 @@ from datetime import datetime
 from .pyiron_calculator import update_failed_job
 
 
+
 def write_log(message, log_file='application.log'):
     # Get the current time and format it
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -133,11 +134,19 @@ def run_packet(df_name,
                 result_ite = RELAXER.vasp_pyiron_calculation(id = to_calculate[i])
                 df.at[to_calculate[i], calculator_label].update(result_ite)
                 status = df.loc[to_calculate[i], calculator_label]['status']
-                if  status == 'initiated' or status == 'running' or status == 'submitted':
+                if  status == 'initiated'  or status == 'submitted':
+
+                    
                     busy += 1
                     if busy >= num_cores:
                         break
                     continue # next one in the list, this one busy
+                elif status == 'running':
+                    busy += 1
+                    if busy >= num_cores:
+                        break
+                    # we need to double check ....
+                    pass
                 else:
                     pass # it less the iteration to go on
 
@@ -150,6 +159,7 @@ def run_packet(df_name,
                 # check and update
                 continue
             if df.loc[to_calculate[i], calculator_label]['status'] == 'aborted':
+                #we need to check if it's actually aborted
                 print('this calculation has been aborted')
                 if 'try_number' in df.loc[to_calculate[i], calculator_label]:
                     df.loc[to_calculate[i], calculator_label]['try_number']+=1
