@@ -1,9 +1,6 @@
 import os
 
-
-
-
-
+import numpy as np
 from pyiron import Project
 from pyiron import ase_to_pyiron
 
@@ -11,13 +8,14 @@ from pymatgen.analysis.magnetism import CollinearMagneticStructureAnalyzer
 from pymatgen.io.vasp.inputs import Kpoints
 
 
+from pymatgen.io.vasp import Vasprun
 
-
-from .slurm import squeue_check
+from .slurm import squeue_check_av
 
 from pymatgen.io import ase
 
 ase_to_pmg = ase.AseAtomsAdaptor.get_structure
+pmg_to_ase = ase.AseAtomsAdaptor.get_atoms
 
 """how to call the calculator
     pw_calc = PW_calculator()
@@ -48,12 +46,19 @@ INPUT_DATA = {'-INCAR-NCORE': 16,
 
 class VASP_pyiron_calculator:
     def __init__(self,
-                input_data = INPUT_DATA,
                 project_pyiron = 'testing_project',
-                
+                **kwargs,
                 ):
-        self.dic_parameters = input_data
+        
         self.project_pyiron_str = project_pyiron
+        if 'input_data' in kwargs:
+            """ we can also change it in case we want to have given
+            VASP parameters in this specific structure """
+            self.dic_parameters = kwargs['input_data']
+            if kwargs['input_data'] is None:
+                self.dic_parameters = INPUT_DATA
+        else:
+            self.dic_parameters = INPUT_DATA
 
     def vasp_pyiron_calculation(self,
                     structure = None, #calculation specific, only when you initiate it uses it
@@ -66,7 +71,9 @@ class VASP_pyiron_calculator:
             """ we can also change it in case we want to have given
             VASP parameters in this specific structure """
             dic_parameters = kwargs['input_data']
-        else: 
+            if kwargs['input_data'] is None:
+                dic_parameters = self.dic_parameters
+        else:
             dic_parameters = self.dic_parameters
 
         if 'update_data' in kwargs:
@@ -95,7 +102,7 @@ class VASP_pyiron_calculator:
             job_function = proj_pyiron.load('vasp_{:015d}'.format(
                                     id
                                     ))
-        print(job_function.status)
+        print('pyiron status: {}'.format(job_function.status))
 
         """depending on pyiron status"""
 
@@ -110,31 +117,44 @@ class VASP_pyiron_calculator:
                 job_function, dic_parameters)
             if return_job:
                 return job_function
-            return
+            return {'master_status' : 'SUBMITTED',
+                    'error': '',
+                    'status_pyiron' : job_function.status.string,
+                    'input_data': dic_parameters,
+                    'starting_structure':structure.copy(),
+                    'energy_traj': None, # in eV
+                    'force_traj': None, # in eV/A
+                    'stress_traj': None, # in eV/A3, MatGL uses GPa
+                    
+                    'structures_traj': None,
+                    'energy_electronic_step': None,
+                    'ionic_steps': None
+                    }
 
-        if job_function.status == 'running' or \
-                job_function.status == 'collect' or \
-                job_function.status == 'submitted':
+        if job_function.status == 'running' or job_function.status == 'submitted': # or job_function.status == 'collect'
             #check if it's actually running
-            status_slurm = squeue_check(job_function['server']['qid'])
+            status_slurm = squeue_check_av(job_function['server']['qid'])
             if status_slurm == 'PENDING' or status_slurm == 'RUNNING':
+                master_status = status_slurm
                 if return_job:
                     return job_function
-                return {'status' : 'running',
+                return {'master_status' : status_slurm,
                         'status_pyiron' : job_function.status.string}
             else:
                 job_function.drop_status_to_aborted()
-                # pyiron status immediately changes to aborted
+                print('dropping pyiron status to aborted')
+                master_status = 'TIMEOUT'
                 if return_job:
                     return job_function
-                return {'status' : 'timed_out',
-                        'status_pyiron' : job_function.status.string}
+                
+                
 
-        if job_function.status == 'finished' or job_function.status == 'aborted' \
-                or job_function.status == 'not_converged' or \
-                job_function.status == 'warning':
+        if job_function.status == 'finished' \
+            or job_function.status == 'aborted' \
+            or job_function.status == 'not_converged' \
+            or job_function.status == 'warning':
             try:
-                print('trying')
+                print('parsing...')
                 """ when it succeds parsing the results"""
                 if return_job:
                     return _get_dft_results_pyiron(job_function, return_job = return_job)
@@ -144,22 +164,28 @@ class VASP_pyiron_calculator:
                 """ when it fails it returns a False (this is important for the standalone relaxer),
                 any other automatic updating has to be done outside in the loop
                 """
-                print(e)
-                return {'status':'failed',
+                print('parsing not succesful')
+                if return_job:
+                    return job_function
+                if 'master_status' in locals():
+                    if master_status == 'TIMEOUT':
+                        print('TIMEOUT')
+                        print(e)
+                        ### parse it when it's timed out
+                        return {'master_status' : 'TIMEOUT',
+                            'status_pyiron': job_function.status.string,
+                            'error': e,
+                            }
+                else:
+                    print('FAILED')
+                    print(e)
+                    return {'master_status':'FAILED',
                         'status_pyiron': job_function.status.string,
-                        'error': e}
+                        'error': e,
+                        }
 
-                #     err_count = self._fail(job_function, it_in_rooster, e)
-                #     if err_count >= 5:
-                #         print('giving up on this run')
-                #     else:
-                #         self._fail_update(
-                #             jobs, i, it_in_rooster, proj_pyiron, err_count)
-                #         continue
-                # finished worked
-            if return_job:
-                return job_function
-            return
+
+
 def _relax_blank(job, dic_parameters):
     for key, value in dic_parameters.items():
         if key.startswith('-INCAR-'):
@@ -187,8 +213,10 @@ def _relax_blank(job, dic_parameters):
     if len(job.structure) == 1:
         job.server.queue = job.server.list_queues()[0]
         job.input.incar['NCORE'] = 1
+    
     elif len(job.structure) > 1 and len(job.structure) <= 5:
-        job.server.queue = job.server.list_queues()[1]
+        job.server.queue = job.server.list_queues()[len(job.structure) - 1]
+
     elif len(job.structure) > 5 and len(job.structure) <= 10:
         job.server.queue = job.server.list_queues()[2]
     elif len(job.structure) > 10 and len(job.structure) <= 15:
@@ -201,6 +229,8 @@ def _relax_blank(job, dic_parameters):
         job.server.queue = job.server.list_queues()[6]
     elif len(job.structure) > 30:
         job.server.queue = job.server.list_queues()[7]
+    
+    
 
 
     if 'k_mesh' in dic_parameters.keys():
@@ -212,8 +242,9 @@ def _relax_blank(job, dic_parameters):
         work_str = Kpoints().automatic_density(ase_to_pmg(
             job.structure), kppa=KPPA)
         
-        print('KPOINTS file')
-        print(work_str)
+        print('SENDING...')
+        # print('KPOINTS file')
+        # print(work_str)
         
         with open('KPOINTS', 'w') as file:
             file.write(str(work_str))
@@ -235,20 +266,21 @@ def _get_dft_results_pyiron(job_func, return_job = False):
         status_pyiron = job_func.status.string
         
         return {'job_name': job_func.job_name,
-                'status': 'finalized',
+                'master_status': 'FINISHED',
                 'status_pyiron': job_func.status.string,
-                'energy_traj': job_func['output/generic/energy_pot'].copy(), # in eV
+                'energy_traj': job_func['output/generic/dft/energy_zero'].copy(), # in eV
                 'force_traj': job_func['output/generic/forces'].copy(), # in eV/A
-                'stress_traj': job_func['output/generic/stresses'].copy(), # in eV/A2, MatGL uses GPa
+                'stress_traj': job_func['output/generic/stresses'].copy(), # in eV/A3, MatGL uses GPa
                 
                 'structures_traj': [
                     j.to_ase().copy() for j in job_func.trajectory()],
                 'energy_electronic_step': job_func[
-                    'output/generic/dft/scf_energy_int'].copy()}
+                    'output/generic/dft/scf_energy_zero'].copy(),
+                'ionic_steps': len(job_func['output/generic/dft/energy_zero'])}
 
 
 
-def update_failed_job(project_name='testing_project', id = 0, try_no = 0):
+def update_failed_job(project_name = 'testing_project', id = 0, try_no = 0):
     
     proj_pyiron = Project(path=project_name)
     job = proj_pyiron.load('vasp_{:015d}'.format(
@@ -257,3 +289,101 @@ def update_failed_job(project_name='testing_project', id = 0, try_no = 0):
     job.copy_to(new_job_name=job.name + '_err_{:02}'.format(try_no - 1), 
                     copy_files=True, 
                     new_database_entry=False)
+
+
+def read_unfinished_job(project_name = 'testing_project', id = 0, vasprun_file = None):
+    print('reading unfinished...')
+    if vasprun_file is not None:
+        file_path = vasprun_file
+        working_directory = '/'.join(vasprun_file.split('/')[:-1])
+    else:
+        proj_pyiron = Project(path=project_name)
+        
+        job = proj_pyiron.load('vasp_{:015d}'.format(
+                                        id
+                                        ))
+        working_directory = job.working_directory                               
+        # Open the original file for reading
+        file_path = job.working_directory+'/vasprun.xml'
+    keyword = '</calculation>'
+    additional_line = '</modeling>'
+    if os.path.exists(file_path):
+        with open(file_path, 'r') as file:
+            lines = file.readlines()
+            last_occurrence = -1
+            for i, line in enumerate(lines):
+                if keyword in line:
+                    last_occurrence = i
+    else:
+        print('vasprun.xml not created')
+        last_occurrence = -1
+
+    if last_occurrence == -1:
+        print('Not one step culminated')
+        return {'ionic_steps': 0,
+        }
+    # If the keyword is found, keep lines up to and including the last occurrence
+    if last_occurrence != -1:
+        truncated_lines = lines[:last_occurrence + 1]
+    else:
+        truncated_lines = lines
+
+    # Add the additional line at the end
+    truncated_lines.append(additional_line + '\n')
+
+    # Write the truncated lines to the new file
+    with open(working_directory+'/truncated_vasprun.xml', 'w') as file:
+        file.writelines(truncated_lines)
+    vasprun = Vasprun(working_directory+'/truncated_vasprun.xml')
+    energy_traj = []
+    force_traj = []
+    stress_traj = []
+    structures_traj = []
+    energy_electronic_step = []
+
+    
+    for i in vasprun.ionic_steps:
+        energy_traj.append(i['e_0_energy'])
+        force_traj.append(i['forces'])
+        stress_traj.append(i['stress'])
+        structures_traj.append(i['structure'].to_ase_atoms().copy())
+        #structures_traj.append(pmg_to_ase())
+        energy_electronic_step.append([])
+        for j in i['electronic_steps']:
+            energy_electronic_step[-1].append(j['e_0_energy'])
+        energy_electronic_step[-1] = np.array(energy_electronic_step[-1])
+    
+    
+    energy_traj = np.array(energy_traj)
+    force_traj = np.array(force_traj)
+    stress_traj = np.array(stress_traj)
+    energy_electronic_step = np.array(energy_electronic_step, dtype= object)
+        
+
+    print('{} steps culminated'.format(len(energy_traj)))
+    return {'energy_traj': energy_traj, # in eV
+                'force_traj': force_traj, # in eV/A
+                'stress_traj': stress_traj, # in GPa
+                'structures_traj': structures_traj,
+                'energy_electronic_step': energy_electronic_step,
+                'ionic_steps': len(energy_traj)}
+
+
+        # print('e_0_energy', i['e_0_energy'])
+        # print('forces', i['forces'])
+        # print('stress', i['stress'])
+        # print('structure', i['structure'].to_ase_atoms().copy())
+        # print(dir(i))
+    # trajectory = vasprun.get_trajectory()
+    # if len(trajectory) > 0:
+    #     structure = trajectory[-1]
+    # else: 
+    #     structure = trajectory[0]
+    # # print(dir(structure))
+    # new_structure = structure.to_ase_atoms()
+
+    # job.copy_to(new_job_name=job.name + '_err_{:02}'.format(try_no - 1), 
+    #     copy_files=True, 
+    #     new_database_entry=False)
+    
+# Define the file paths

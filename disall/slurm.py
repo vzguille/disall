@@ -46,13 +46,13 @@ def squeue_check_av(ID, user = 'guillermo.vazquez', out_print = False):
     start_time=out_work[29].decode("utf-8")
     status =   out_work[27].decode("utf-8")
     
-    print('job_id', job_id)
-    print('nodes', nodes)
-    print('tasks', tasks)
-    print('time', time)
-    print('start_time', start_time)
-    print('status', status)
-    return out_work
+    # print('job_id', job_id)
+    # print('nodes', nodes)
+    # print('tasks', tasks)
+    # print('time', time)
+    # print('start_time', start_time)
+    # print('status', status)
+    return status
 
     # if squeue_output.stdout==b'':
     #     print('ERROR in squeue check: '+squeue_output.stderr.decode("utf-8") )
