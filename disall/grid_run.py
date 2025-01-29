@@ -180,16 +180,16 @@ def run_packet(df_name,
                     ['error_{:02d}'.format(try_no - 1)] = \
                         df.loc[to_calculate[i], calculator_label]['error']
 
-                df.at[to_calculate[i], calculator_label]['status_{}'.format(try_no - 1)] = 'FAILED'
+                df.at[to_calculate[i], calculator_label]['status_{:02d}'.format(try_no - 1)] = 'FAILED'
                 
-                df.at[to_calculate[i], calculator_label]['error_count_{}'.format(try_no - 1)] = error_count
-                df.at[to_calculate[i], calculator_label]['input_data_{}'.format(try_no - 1)] = \
+                df.at[to_calculate[i], calculator_label]['error_count_{:02d}'.format(try_no - 1)] = error_count
+                df.at[to_calculate[i], calculator_label]['input_data_{:02d}'.format(try_no - 1)] = \
                     df.at[to_calculate[i], calculator_label]['input_data'].copy()
-                df.at[to_calculate[i], calculator_label]['starting_structure_{}'.format(try_no - 1)] = \
+                df.at[to_calculate[i], calculator_label]['starting_structure_{:02d}'.format(try_no - 1)] = \
                     df.at[to_calculate[i], calculator_label]['starting_structure'].copy()
                 
                 if try_no < max_tries:
-                    print('running again try_no:{}'.format(try_no))
+                    print('running again try_no:{:02d}'.format(try_no))
                     """what do we change?
                     structure scale and k points ?"""
                     
@@ -251,11 +251,15 @@ def run_packet(df_name,
                 
                 # update
                 df.loc[to_calculate[i], calculator_label][
-                    'ionic_steps_{}'.format(try_no - 1)] = df.loc[
+                    'ionic_steps_{:02d}'.format(try_no - 1)] = df.loc[
                         to_calculate[i], calculator_label]['ionic_steps']
                 
                 df.at[to_calculate[i], calculator_label][
-                    'status_{}'.format(try_no - 1)] = 'TIMEOUT'
+                    'status_{:02d}'.format(try_no - 1)] = 'TIMEOUT'
+
+                df.loc[to_calculate[i], calculator_label] \
+                    ['error_{:02d}'.format(try_no - 1)] = \
+                        df.loc[to_calculate[i], calculator_label]['error']
 
                 if 'error_count' in df.loc[to_calculate[i], calculator_label]:
                     # if try_no already existed we save errors from last
@@ -264,19 +268,27 @@ def run_packet(df_name,
                     df.loc[to_calculate[i], calculator_label]['error_count'] = 0
                     error_count = 0
 
-                df.at[to_calculate[i], calculator_label]['error_count_{}'.format(try_no - 1)] = error_count
-                df.at[to_calculate[i], calculator_label]['input_data_{}'.format(try_no - 1)] = \
+                
+                df.at[to_calculate[i], calculator_label]['input_data_{:02d}'.format(try_no - 1)] = \
                     df.at[to_calculate[i], calculator_label]['input_data'].copy()
-                df.at[to_calculate[i], calculator_label]['starting_structure_{}'.format(try_no - 1)] = \
+                df.at[to_calculate[i], calculator_label]['starting_structure_{:02d}'.format(try_no - 1)] = \
                     df.at[to_calculate[i], calculator_label]['starting_structure'].copy()
 
+                df.at[to_calculate[i], calculator_label]['error_count_{:02d}'.format(try_no - 1)] = \
+                            df.at[to_calculate[i], calculator_label]['error_count']
 
 
-
-                if ionic_steps < 1:
+                if ionic_steps < 2:
                     if try_no < max_tries:
-                        print('running again try_no:{}'.format(try_no))
-                        
+                        print('TIMEOUT counting as error')
+                        print('running again try_no:{:02d}'.format(try_no))
+                        error_count += 1
+
+                        ### redo error_count ###
+                        df.at[to_calculate[i], calculator_label][
+                            'error_count'] = error_count
+                        df.at[to_calculate[i], calculator_label]['error_count_{:02d}'.format(try_no - 1)] = \
+                            df.at[to_calculate[i], calculator_label]['error_count']
 
                         update_failed_job(calculator_label, to_calculate[i], try_no)
                         
@@ -295,69 +307,65 @@ def run_packet(df_name,
                             )
                         )
                         busy += 1
-                        busy_workers.append(to_calculate[i])
-                        if busy >= num_cores:
-                            print('all workers busy, working on {}'.format(busy_workers))
-                            break
-                        continue
+                        busy_workers.append(to_calculate[i])                    
                     else:
                         print('we tried too many times this structure, last update TIMEOUT, 0 steps')
 
 
                     
-                else:
+                if ionic_steps > 0:
                     
                     df.loc[to_calculate[i], calculator_label][
-                        'energy_traj_{}'.format(try_no - 1)] = df.loc[
+                        'energy_traj_{:02d}'.format(try_no - 1)] = df.loc[
                             to_calculate[i], calculator_label]['energy_traj']
                     df.loc[to_calculate[i], calculator_label][
-                        'force_traj_{}'.format(try_no - 1)] = df.loc[
+                        'force_traj_{:02d}'.format(try_no - 1)] = df.loc[
                             to_calculate[i], calculator_label]['force_traj']
                     df.loc[to_calculate[i], calculator_label][
-                        'stress_traj_{}'.format(try_no - 1)] = df.loc[
+                        'stress_traj_{:02d}'.format(try_no - 1)] = df.loc[
                             to_calculate[i], calculator_label]['stress_traj']
                     df.loc[to_calculate[i], calculator_label][
-                        'structures_traj_{}'.format(try_no - 1)] = df.loc[
+                        'structures_traj_{:02d}'.format(try_no - 1)] = df.loc[
                             to_calculate[i], calculator_label]['structures_traj']
                     df.loc[to_calculate[i], calculator_label][
-                        'energy_electronic_step_{}'.format(try_no - 1)] = df.loc[
+                        'energy_electronic_step_{:02d}'.format(try_no - 1)] = df.loc[
                             to_calculate[i], calculator_label]['energy_electronic_step']
                     
                     
                     
 
-                    
-                    # first, we copy the aborted job, we do it from a custom function in pyiron_calculator,
-                    # so we don't start the project here
-                    if try_no < max_tries:
-                        print('running again try_no:{}'.format(try_no))
-                        update_failed_job(calculator_label, to_calculate[i], try_no)
-                        new_structure = df.loc[to_calculate[i], calculator_label][
-                            'structures_traj_{}'.format(try_no - 1)][-1].copy()
-                        
-                        # we update status, how do we keep track of erros?
-                        df.at[to_calculate[i], calculator_label].update(
-                            RELAXER.vasp_pyiron_calculation(
-                            structure = new_structure,
-                            id = to_calculate[i],
-                            RE = True,
+                    if ionic_steps > 1:
+                        # first, we copy the aborted job, we do it from a custom function in pyiron_calculator,
+                        # so we don't start the project here
+                        if try_no < max_tries:
+                            print('running again try_no:{:02d}'.format(try_no))
+                            update_failed_job(calculator_label, to_calculate[i], try_no)
+                            new_structure = df.loc[to_calculate[i], calculator_label][
+                                'structures_traj_{:02d}'.format(try_no - 1)][-1].copy()
+                            
+                            # we update status, how do we keep track of erros?
+                            df.at[to_calculate[i], calculator_label].update(
+                                RELAXER.vasp_pyiron_calculation(
+                                structure = new_structure,
+                                id = to_calculate[i],
+                                RE = True,
+                                )
                             )
-                        )
-                        busy += 1
-                        busy_workers.append(to_calculate[i])
-                        if busy >= num_cores:
-                            print('all workers busy, working on {}'.format(busy_workers))
-                            break
-                        continue
-                    else:
-                        print('we tried too many times this structure, last update TIMEOUT')
-
+                            busy += 1
+                            busy_workers.append(to_calculate[i])
+                            
+                                
+                        else:
+                            print('we tried too many times this structure, last update TIMEOUT')
+            if busy >= num_cores:
+                print('all workers busy, working on {}'.format(busy_workers))
+                break
 
             if df.loc[to_calculate[i], calculator_label]['master_status'] == 'FINISHED':
                 
                 if 'try_no' in df.loc[to_calculate[i], calculator_label]:
                     try_no = df.loc[to_calculate[i], calculator_label]['try_no'] + 1
-                    if 'status_{}'.format(try_no - 1) in df.at[to_calculate[i], calculator_label].keys():
+                    if 'status_{:02d}'.format(try_no - 1) in df.at[to_calculate[i], calculator_label].keys():
                         print('this calculation has finished succesfully, already parsed')
                         continue
                 else:
@@ -373,34 +381,38 @@ def run_packet(df_name,
                     df.loc[to_calculate[i], calculator_label]['error_count'] = 0
                     error_count = 0
 
+                df.loc[to_calculate[i], calculator_label] \
+                    ['error_{:02d}'.format(try_no - 1)] = \
+                        df.loc[to_calculate[i], calculator_label]['error']
+                
                 df.at[to_calculate[i], calculator_label][
-                    'status_{}'.format(try_no - 1)] = 'FINISHED'
+                    'status_{:02d}'.format(try_no - 1)] = 'FINISHED'
 
-                df.at[to_calculate[i], calculator_label]['error_count_{}'.format(try_no - 1)] = error_count
-                df.at[to_calculate[i], calculator_label]['input_data_{}'.format(try_no - 1)] = \
+                df.at[to_calculate[i], calculator_label]['error_count_{:02d}'.format(try_no - 1)] = error_count
+                df.at[to_calculate[i], calculator_label]['input_data_{:02d}'.format(try_no - 1)] = \
                     df.at[to_calculate[i], calculator_label]['input_data'].copy()
-                df.at[to_calculate[i], calculator_label]['starting_structure_{}'.format(try_no - 1)] = \
+                df.at[to_calculate[i], calculator_label]['starting_structure_{:02d}'.format(try_no - 1)] = \
                     df.at[to_calculate[i], calculator_label]['starting_structure'].copy()
                     
                 df.loc[to_calculate[i], calculator_label][
-                    'energy_traj_{}'.format(try_no - 1)] = df.loc[
+                    'energy_traj_{:02d}'.format(try_no - 1)] = df.loc[
                         to_calculate[i], calculator_label]['energy_traj']
                 df.loc[to_calculate[i], calculator_label][
-                    'force_traj_{}'.format(try_no - 1)] = df.loc[
+                    'force_traj_{:02d}'.format(try_no - 1)] = df.loc[
                         to_calculate[i], calculator_label]['force_traj']
                 df.loc[to_calculate[i], calculator_label][
-                    'stress_traj_{}'.format(try_no - 1)] = df.loc[
+                    'stress_traj_{:02d}'.format(try_no - 1)] = df.loc[
                         to_calculate[i], calculator_label]['stress_traj']
                 df.loc[to_calculate[i], calculator_label][
-                    'structures_traj_{}'.format(try_no - 1)] = df.loc[
+                    'structures_traj_{:02d}'.format(try_no - 1)] = df.loc[
                         to_calculate[i], calculator_label]['structures_traj']
 
                 df.loc[to_calculate[i], calculator_label][
-                    'ionic_steps_{}'.format(try_no - 1)] = df.loc[
+                    'ionic_steps_{:02d}'.format(try_no - 1)] = df.loc[
                         to_calculate[i], calculator_label]['ionic_steps']
 
                 df.loc[to_calculate[i], calculator_label][
-                    'energy_electronic_step_{}'.format(try_no - 1)] = df.loc[
+                    'energy_electronic_step_{:02d}'.format(try_no - 1)] = df.loc[
                         to_calculate[i], calculator_label]['energy_electronic_step']
 
                 

@@ -315,11 +315,11 @@ def read_unfinished_job(project_name = 'testing_project', id = 0, vasprun_file =
                 if keyword in line:
                     last_occurrence = i
     else:
-        print('vasprun.xml not created')
+        print('vasprun.xml NOT CREATED')
         last_occurrence = -1
 
     if last_occurrence == -1:
-        print('Not one step culminated')
+        print('NOT ONE step culminated')
         return {'ionic_steps': 0,
         }
     # If the keyword is found, keep lines up to and including the last occurrence
