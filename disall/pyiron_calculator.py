@@ -1,4 +1,8 @@
 import os
+import re
+
+import shutil
+import time
 
 import numpy as np
 from pyiron import Project
@@ -13,6 +17,8 @@ from pymatgen.io.vasp import Vasprun
 from .slurm import squeue_check_av
 
 from pymatgen.io import ase
+
+
 
 ase_to_pmg = ase.AseAtomsAdaptor.get_structure
 pmg_to_ase = ase.AseAtomsAdaptor.get_atoms
@@ -102,7 +108,7 @@ class VASP_pyiron_calculator:
             job_function = proj_pyiron.load('vasp_{:015d}'.format(
                                     id
                                     ))
-        print('pyiron status: {}'.format(job_function.status))
+        print('pyiron_status start of loop: {}'.format(job_function.status))
 
         """depending on pyiron status"""
 
@@ -118,6 +124,8 @@ class VASP_pyiron_calculator:
             if return_job:
                 return job_function
             return {'master_status' : 'SUBMITTED',
+                    'job_name': job_function.job_name,
+                    'QID': job_function['server']['qid'],
                     'error': '',
                     'status_pyiron' : job_function.status.string,
                     'input_data': dic_parameters,
@@ -133,8 +141,44 @@ class VASP_pyiron_calculator:
 
         if job_function.status == 'running' or job_function.status == 'submitted': # or job_function.status == 'collect'
             #check if it's actually running
-            status_slurm = squeue_check_av(job_function['server']['qid'])
-            if status_slurm == 'PENDING' or status_slurm == 'RUNNING':
+            print('pyiron QID', job_function['server']['qid'])
+            squeue_valid = False
+            for i in range(3):
+                try:
+                    status_slurm, run_time = squeue_check_av(job_function['server']['qid'])
+                    QID = job_function['server']['qid']
+                    squeue_valid = True
+                    break
+                except Exception as e:
+                    print('SQUEUE ERROR {}'.format(i))
+                    print(e)
+                    time.sleep(0.2)
+            if not squeue_valid:
+                print('running/submitted alternate squeue check, status: {}'.format(
+                    job_function.status))
+                QID = _find_job_number(job_function.working_directory)
+                status_slurm, run_time = squeue_check_av(QID)
+                print('alternate result, QID: {}, status_slurm: {}, run_time: {}'.format(
+                    QID, status_slurm, run_time
+                ))
+            print('status_pyiron: {}, status_slurm: {}'.format(job_function.status, status_slurm))
+            # if not squeue_valid:
+            #     job_function.drop_status_to_aborted() # error in queues, we just give up
+            #     return {'master_status' : 'FAILED',
+            #         'job_name': job_function.job_name,
+            #         'QID': job_function['server']['qid'],
+            #         'error': 'queue failed',
+            #         'status_pyiron' : job_function.status.string,
+            #         'input_data': dic_parameters,
+            #         'starting_structure': structure.copy(),
+            #         'energy_traj': None, # in eV
+            #         'force_traj': None, # in eV/A
+            #         'stress_traj': None, # in eV/A3, MatGL uses GPa
+            #         'structures_traj': None,
+            #         'energy_electronic_step': None,
+            #         'ionic_steps': None
+            #         }
+            if status_slurm == 'PENDING' or status_slurm == 'RUNNING' or status_slurm == 'COMPLETING':
                 master_status = status_slurm
                 if return_job:
                     return job_function
@@ -153,13 +197,55 @@ class VASP_pyiron_calculator:
             or job_function.status == 'aborted' \
             or job_function.status == 'not_converged' \
             or job_function.status == 'warning':
+            squeue_valid = False
+            print('pyiron QID', job_function['server']['qid'])
+            for i in range(3):
+                try:
+                    status_slurm, run_time = squeue_check_av(job_function['server']['qid'])
+                    QID = job_function['server']['qid']
+                    squeue_valid = True
+                    break
+                except Exception as e:
+                    print('SQUEUE ERROR {}'.format(i))
+                    print(e)
+                    time.sleep(0.2)
+            if not squeue_valid:
+                
+                print('finished/aborted alternate squeue check, status: {}'.format(
+                    job_function.status))
+                # run_queue error returns an error here until it gets a QID,
+                # therefore, calc returns None
+                QID = _find_job_number(job_function.working_directory)
+                status_slurm, run_time = squeue_check_av(QID)
+                print('alternate result, QID: {}, status_slurm: {}, run_time: {}'.format(
+                    QID, status_slurm, run_time
+                ))
+            
+            print('status_pyiron: {}, status_slurm: {}'.format(job_function.status, status_slurm))
+
+                        
+            if os.path.exists(job_function.working_directory+'/truncated_vasprun.xml'):
+                master_status = 'TIMEOUT'
+                print('reverting aborted to TIMEOUT due to previous error')
+            if status_slurm == 'RUNNING':
+                master_status = 'RUNNING'
+                return {'master_status' : 'RUNNING',
+                            'status_pyiron': job_function.status.string,
+                            'error': '',
+                            'QID': QID, 
+                            'run_time': run_time,
+                            }
             try:
-                print('parsing...')
+                print('parsing pyiron job...')
                 """ when it succeds parsing the results"""
                 if return_job:
                     return _get_dft_results_pyiron(job_function, return_job = return_job)
                 else:
-                    return _get_dft_results_pyiron(job_function)
+                    
+                    res_dir = _get_dft_results_pyiron(job_function)
+                    res_dir.update({'QID': QID, 'run_time': run_time})
+                    return res_dir
+                time.sleep(0.5)
             except Exception as e:
                 """ when it fails it returns a False (this is important for the standalone relaxer),
                 any other automatic updating has to be done outside in the loop
@@ -171,10 +257,12 @@ class VASP_pyiron_calculator:
                     if master_status == 'TIMEOUT':
                         print('TIMEOUT')
                         print(e)
-                        ### parse it when it's timed out
+                        ### parse it when it's run_timed out
                         return {'master_status' : 'TIMEOUT',
                             'status_pyiron': job_function.status.string,
                             'error': e,
+                            'QID': QID, 
+                            'run_time': run_time,
                             }
                 else:
                     print('FAILED')
@@ -182,6 +270,8 @@ class VASP_pyiron_calculator:
                     return {'master_status':'FAILED',
                         'status_pyiron': job_function.status.string,
                         'error': e,
+                        'QID': QID, 
+                        'run_time': run_time,
                         }
 
 
@@ -243,6 +333,7 @@ def _relax_blank(job, dic_parameters):
             job.structure), kppa=KPPA)
         
         print('SENDING...')
+        time.sleep(2)
         # print('KPOINTS file')
         # print(work_str)
         
@@ -260,17 +351,19 @@ def _relax_blank(job, dic_parameters):
     
 
 def _get_dft_results_pyiron(job_func, return_job = False):
+    CONVERSION_to_ = 1602.176621 # transforming back to VASP values 
     if return_job:
         return job_func
     else:
         status_pyiron = job_func.status.string
-        
-        return {'job_name': job_func.job_name,
-                'master_status': 'FINISHED',
+        return {'master_status': 'FINISHED',
+                'error':'',
+                
                 'status_pyiron': job_func.status.string,
+                
                 'energy_traj': job_func['output/generic/dft/energy_zero'].copy(), # in eV
                 'force_traj': job_func['output/generic/forces'].copy(), # in eV/A
-                'stress_traj': job_func['output/generic/stresses'].copy(), # in eV/A3, MatGL uses GPa
+                'stress_traj': job_func['output/generic/stresses'].copy()*CONVERSION_to_, # in eV/A3, MatGL uses GPa
                 
                 'structures_traj': [
                     j.to_ase().copy() for j in job_func.trajectory()],
@@ -289,19 +382,54 @@ def update_failed_job(project_name = 'testing_project', id = 0, try_no = 0):
     job.copy_to(new_job_name=job.name + '_err_{:02}'.format(try_no - 1), 
                     copy_files=True, 
                     new_database_entry=False)
+    
+    # we leave it for later                
+    # _zip_job_dir(project_name +'/'+ job.name + '_err_{:02}'.format(try_no - 1))
+
+def _zip_job_dir(dir_name, DEL_AFTER=True):
+        _zip_archive(dir_name,
+                     dir_name + '.zip')
+        if DEL_AFTER:
+            shutil.rmtree(dir_name)
+            
+def _zip_archive(source, destination):
+    base = os.path.basename(destination)
+    name = base.split('.')[0]
+    format = base.split('.')[1]
+    archive_from = os.path.dirname(source)
+    archive_to = os.path.basename(source.strip(os.sep))
+    shutil.make_archive(name, format, archive_from, archive_to)
+    shutil.move('%s.%s' % (name, format), destination)
 
 
 def read_unfinished_job(project_name = 'testing_project', id = 0, vasprun_file = None):
     print('reading unfinished...')
+    
+    
+    
+    
+
     if vasprun_file is not None:
         file_path = vasprun_file
         working_directory = '/'.join(vasprun_file.split('/')[:-1])
     else:
         proj_pyiron = Project(path=project_name)
         
+        
         job = proj_pyiron.load('vasp_{:015d}'.format(
                                         id
                                         ))
+        
+        squeue_valid = False
+        for i in range(5):
+            try:
+                status_slurm, run_time = squeue_check_av(job['server']['qid'])
+                squeue_valid = True
+                break
+            except Exception as e:
+                print('SQUEUE ERROR {}'.format(i))
+                print(e)
+                time.sleep(1)
         working_directory = job.working_directory                               
         # Open the original file for reading
         file_path = job.working_directory+'/vasprun.xml'
@@ -361,7 +489,8 @@ def read_unfinished_job(project_name = 'testing_project', id = 0, vasprun_file =
         
 
     print('{} steps culminated'.format(len(energy_traj)))
-    return {'energy_traj': energy_traj, # in eV
+    return {'run_time': run_time,
+                'energy_traj': energy_traj, # in eV
                 'force_traj': force_traj, # in eV/A
                 'stress_traj': stress_traj, # in GPa
                 'structures_traj': structures_traj,
@@ -387,3 +516,9 @@ def read_unfinished_job(project_name = 'testing_project', id = 0, vasprun_file =
     #     new_database_entry=False)
     
 # Define the file paths
+def _find_job_number(directory):
+    for filename in os.listdir(directory):
+        match = re.match(r"job\.l(\d+)", filename)
+        if match:
+            return match.group(1)  # Extract the number
+    return None  # Return None if no matching file is found

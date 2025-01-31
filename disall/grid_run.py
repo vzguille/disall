@@ -2,7 +2,7 @@ import random
 import time
 from pymatgen.io import ase as pg_ase
 from datetime import datetime
-
+import copy
 
 from .pyiron_calculator import update_failed_job, read_unfinished_job
 
@@ -30,7 +30,6 @@ def run_packet(df_name,
                 df_global, 
                 relaxer_dict,
                 input_data=None,
-                copy_calculated=None,
                 num_cores = 10,
                 max_tries = 5,
                 **kwargs):
@@ -40,11 +39,10 @@ def run_packet(df_name,
     two different loops saving and loading! (only to o when a changed occured?)
     
     """
-    
     calculator_label, relaxer = relaxer_dict['calculator_label'], relaxer_dict['relaxer']
     """ setting up calculator_label  """
     
-    df = df_global.copy() # for safekeeping
+    df = df_global.copy(deep = True) # for safekeeping
     
     if calculator_label not in df.columns:
         df[calculator_label] = None
@@ -117,7 +115,7 @@ def run_packet(df_name,
         
 
     # instead of running we check
-    print('calculating batch {}'.format(to_calculate))
+    # print('calculating batch {}'.format(to_calculate))
     """we need to start by creating a whole system that calculates 
     the whole indexes 'to_calculate' 
     by starting a pyiron project of name 'relaxer_dict['calculator_label']'
@@ -127,7 +125,7 @@ def run_packet(df_name,
     
     busy = 0
     busy_workers = []
-    RELAXER = relaxer(project_pyiron = calculator_label, input_data = input_data)
+    RELAXER = relaxer(project_pyiron = calculator_label, input_data = copy.deepcopy(input_data))
     print('in {} number of cores'.format(num_cores))
     for i, _ in enumerate(to_calculate):
         print('#'*10+'< i: {}, to_calculate[i]: {}  >'.format(i, to_calculate[i])+'#'*10)
@@ -179,6 +177,12 @@ def run_packet(df_name,
                 df.loc[to_calculate[i], calculator_label] \
                     ['error_{:02d}'.format(try_no - 1)] = \
                         df.loc[to_calculate[i], calculator_label]['error']
+                df.loc[to_calculate[i], calculator_label] \
+                    ['QID_{:02d}'.format(try_no - 1)] = \
+                        df.loc[to_calculate[i], calculator_label]['QID']
+                df.loc[to_calculate[i], calculator_label] \
+                    ['run_time_{:02d}'.format(try_no - 1)] = \
+                        df.loc[to_calculate[i], calculator_label]['run_time']
 
                 df.at[to_calculate[i], calculator_label]['status_{:02d}'.format(try_no - 1)] = 'FAILED'
                 
@@ -205,16 +209,23 @@ def run_packet(df_name,
                                             scale_atoms=True)
                                             
                     
-                    
+                    update_incar = {} #{'-INCAR-ENCUT': 400 + int(20*error_count)},
                     # we update status, how do we keep track of erros?
                     df.at[to_calculate[i], calculator_label].update(
                         RELAXER.vasp_pyiron_calculation(
                         structure = new_structure,
                         id = to_calculate[i],
-                        update_data = {'-INCAR-ENCUT': 400 + int(20*error_count)},
+                        update_data = update_incar,
                         RE = True,
                         )
                     )
+                    # updating to add input_data and starting_structure
+                    iter_data = copy.deepcopy(input_data)
+                    iter_data.update(update_incar),
+                    df.at[to_calculate[i], calculator_label].update({
+                        'input_data': copy.deepcopy(iter_data),
+                        'starting_structure': new_structure.copy()
+                    })
                     busy += 1
                     busy_workers.append(to_calculate[i])
                     if busy >= num_cores:
@@ -260,7 +271,12 @@ def run_packet(df_name,
                 df.loc[to_calculate[i], calculator_label] \
                     ['error_{:02d}'.format(try_no - 1)] = \
                         df.loc[to_calculate[i], calculator_label]['error']
-
+                df.loc[to_calculate[i], calculator_label] \
+                    ['QID_{:02d}'.format(try_no - 1)] = \
+                        df.loc[to_calculate[i], calculator_label]['QID']
+                df.loc[to_calculate[i], calculator_label] \
+                    ['run_time_{:02d}'.format(try_no - 1)] = \
+                        df.loc[to_calculate[i], calculator_label]['run_time']
                 if 'error_count' in df.loc[to_calculate[i], calculator_label]:
                     # if try_no already existed we save errors from last
                     error_count = df.loc[to_calculate[i], calculator_label]['error_count']
@@ -298,14 +314,25 @@ def run_packet(df_name,
                         new_structure.set_cell(org_structure.cell.array*(1 + error_count*0.025),
                                                 scale_atoms=True)
                         # we update status, how do we keep track of erros?
+                        
+                        update_incar = {} #{'-INCAR-ENCUT': 400 + int(20*error_count)},
+
                         df.at[to_calculate[i], calculator_label].update(
                             RELAXER.vasp_pyiron_calculation(
                             structure = new_structure,
                             id = to_calculate[i],
-                            update_data = {'-INCAR-ENCUT': 400 + int(20*error_count)},
+                            update_data = update_incar,
                             RE = True,
                             )
                         )
+                        
+                        # updating to add input_data and starting_structure
+                        iter_data = copy.deepcopy(input_data)
+                        iter_data.update(update_incar),
+                        df.at[to_calculate[i], calculator_label].update({
+                            'input_data': copy.deepcopy(iter_data),
+                            'starting_structure': new_structure.copy(),
+                        })
                         busy += 1
                         busy_workers.append(to_calculate[i])                    
                     else:
@@ -351,6 +378,12 @@ def run_packet(df_name,
                                 RE = True,
                                 )
                             )
+                            # updating to add input_data and starting_structure
+                            df.at[to_calculate[i], calculator_label].update({
+                                'input_data': copy.deepcopy(input_data),
+                                'starting_structure': new_structure.copy(),
+                            })
+                            
                             busy += 1
                             busy_workers.append(to_calculate[i])
                             
@@ -373,7 +406,7 @@ def run_packet(df_name,
                     try_no = 1
                 ### check if already parsed, if yes just skip
                 
-                print('this calculation has finished succesfully, parsing...')
+                print('this calculation has finished succesfully, parsing master dictionary...')
                 if 'error_count' in df.loc[to_calculate[i], calculator_label]:
                     # if try_no already existed we save errors from last
                     error_count = df.loc[to_calculate[i], calculator_label]['error_count']
@@ -384,6 +417,13 @@ def run_packet(df_name,
                 df.loc[to_calculate[i], calculator_label] \
                     ['error_{:02d}'.format(try_no - 1)] = \
                         df.loc[to_calculate[i], calculator_label]['error']
+                df.loc[to_calculate[i], calculator_label] \
+                    ['QID_{:02d}'.format(try_no - 1)] = \
+                        df.loc[to_calculate[i], calculator_label]['QID']
+                df.loc[to_calculate[i], calculator_label] \
+                    ['run_time_{:02d}'.format(try_no - 1)] = \
+                        df.loc[to_calculate[i], calculator_label]['run_time']
+                
                 
                 df.at[to_calculate[i], calculator_label][
                     'status_{:02d}'.format(try_no - 1)] = 'FINISHED'
@@ -414,19 +454,31 @@ def run_packet(df_name,
                 df.loc[to_calculate[i], calculator_label][
                     'energy_electronic_step_{:02d}'.format(try_no - 1)] = df.loc[
                         to_calculate[i], calculator_label]['energy_electronic_step']
-
-                
-                    
-
                 # check and update
                 continue
         else:
             # if the dataframe block is empty, initialize(only the first time)
+            # print(input_data)
+            if len(df.loc[to_calculate[i], 'init_structure']) == 1:
+                update_incar = {'-INCAR-NCORE': 1,}
+            else:
+                update_incar = {}
             
-            df.at[to_calculate[i], calculator_label]= RELAXER.vasp_pyiron_calculation(structure = df.loc[
+            df.at[to_calculate[i], calculator_label] = RELAXER.vasp_pyiron_calculation(structure = df.loc[
                 to_calculate[i], 'init_structure'],
                 id = to_calculate[i],
+                update_data = update_incar
                 )
+            # updating to add input_data and starting_structure
+            iter_data = copy.deepcopy(input_data)
+            iter_data.update(update_incar)
+            # print(iter_data)
+            df.at[to_calculate[i], calculator_label].update({
+                'input_data': copy.deepcopy(iter_data),
+                'starting_structure': df.loc[
+                to_calculate[i], 'init_structure'].copy()
+            })
+
             busy += 1
             busy_workers.append(to_calculate[i])
             if busy >= num_cores:
@@ -441,13 +493,19 @@ def run_packet(df_name,
     df.attrs[calculator_label]['marked'] = list(
         set(df.attrs[calculator_label]['marked']))
     
-    
-    
+    # we leave zipping for later, right now if there's an error
+    # it'd run the loop again since it won't save previous runs
+    # df.loc[to_calculate, calculator_label]= [3,3,3]
+    # print(df.loc[to_calculate, calculator_label])
+    # ERROR
+    print('saving...')
     df.to_pickle(df_name+'.pkl')
+    print('saved succesfully')
+    df_global = df.copy(deep = True)
 
-    return df
+    return df_global
 
-    
+
 # else: 
         #     df.at[to_calculate[i], calculator_label]= {'status':'not started'}
         #     print('not started/not info on {:015d}'.format(to_calculate[i]))

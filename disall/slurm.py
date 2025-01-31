@@ -52,7 +52,7 @@ def squeue_check_av(ID, user = 'guillermo.vazquez', out_print = False):
     # print('time', time)
     # print('start_time', start_time)
     # print('status', status)
-    return status
+    return status, time
 
     # if squeue_output.stdout==b'':
     #     print('ERROR in squeue check: '+squeue_output.stderr.decode("utf-8") )
