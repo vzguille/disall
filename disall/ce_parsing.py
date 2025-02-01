@@ -1,7 +1,15 @@
 from collections import Counter
 import numpy as np
 import pandas as pd
+import itertools
 
+from ase.build.supercells import make_supercell
+from pymatgen.io import ase as pgase
+
+ase_to_pmg = pgase.AseAtomsAdaptor.get_structure
+pmg_to_ase = pgase.AseAtomsAdaptor.get_atoms
+
+from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 
 
 def ase_checkrelax(ase_ini,ase_fin,cutoff=0.05):
@@ -36,7 +44,7 @@ def row_volume(x):
     return x['structure_final'].get_volume()/x['size']
 
 
-def parse_relaxer(df, calculator_label):
+def parse_to_ce(df, calculator_label):
 
     num_atoms = len(df[df['size'] == 1])
 
@@ -60,7 +68,14 @@ def parse_relaxer(df, calculator_label):
 
     elements = list(dict_reference.keys())
     elements.sort()
-    return relax_chgnet_df, df.loc[0, 'init_structure'].copy(), elements
+
+    prim = df.loc[0, 'init_structure'].copy()
+    
+    sgn = SpacegroupAnalyzer(ase_to_pmg(prim)).get_space_group_number()
+    if sgn == 225:
+        conventional_parameter = np.sqrt(2) * np.linalg.norm(prim.cell.array[0])
+
+    return relax_chgnet_df, prim, conventional_parameter, elements
 
 def filter_strain(df, strain_treshold = 0.05):
     # df_work_set
@@ -68,3 +83,79 @@ def filter_strain(df, strain_treshold = 0.05):
     df_work = df_work[df_work['strain_level'] < strain_treshold]
     df_work = df_work.sort_values(by = 'index')
     return df_work
+
+###
+
+def make_supercell_cubic(prim, times = [5, 5, 8], conventional = False):
+    if conventional:
+        sgn = SpacegroupAnalyzer(ase_to_pmg(prim)).get_space_group_number()
+        if sgn == 225:
+            conv_a0 =  np.sqrt(2) * np.linalg.norm(prim.cell.array[0])
+        conv_cell = np.array([[conv_a0,0,0],[0,conv_a0,0],[0,0,conv_a0]])
+        MM = conv_cell@ np.linalg.inv(prim.cell.array)
+
+        conv_structure = make_supercell(prim, MM)
+        structure = conv_structure.copy()
+    else:
+        structure = prim.copy()
+    ce_supercell = make_supercell(structure, np.array([[times[0],0,0],
+                                             [0,times[1],0],
+                                             [0,0,times[2]],]))
+    return ce_supercell
+
+def best_integer_composition(compositions, min_l = 6, max_l = 10, conventional = False, prim = None):
+    # Step 1: Compute all unique (m, n, k) values and their corresponding sums
+    
+    
+    if conventional:
+        sgn = SpacegroupAnalyzer(ase_to_pmg(prim)).get_space_group_number()
+        if sgn == 225:
+            conv_a0 =  np.sqrt(2) * np.linalg.norm(prim.cell.array[0])
+        conv_cell = np.array([[conv_a0,0,0],[0,conv_a0,0],[0,0,conv_a0]])
+        MM = conv_cell@ np.linalg.inv(prim.cell.array)
+        conv_structure = make_supercell(prim, MM)
+        size_conv = len(conv_structure)
+    else:
+        size_conv = 1
+    possible_sums = []
+    for m, n, k in itertools.combinations_with_replacement(range(min_l, max_l), 3):
+        possible_sums.append((size_conv * m * n * k, m, n, k))
+
+
+    # Step 2: Normalize the composition to sum to 1
+    compositions = np.array(compositions)
+    normalized = compositions / np.sum(compositions)
+
+    best_sum = None
+    best_int_values = None
+    best_mnk = None
+    min_error = float('inf')
+
+    # Step 3: Iterate over all possible sums and find the best one
+    for target_sum, m, n, k in possible_sums:
+        # Scale composition to this sum
+        scaled_values = normalized * target_sum
+        floored_values = np.floor(scaled_values).astype(int)  # Initial floor rounding
+        
+        # Compute remainders (how much each value was reduced by flooring)
+        remainders = scaled_values - floored_values
+        
+        # Compute the deficit (how much we need to adjust to meet the exact target sum)
+        deficit = target_sum - np.sum(floored_values)
+        
+        # Fix sum by distributing the deficit among the largest remainders
+        indices = np.argsort(remainders)[::-1]  # Sort indices by largest remainder
+        for i in range(deficit):
+            floored_values[indices[i]] += 1  # Increase values with highest remainders first
+        
+        # Compute total error (sum of absolute differences)
+        error = np.sum(np.abs( (floored_values/np.sum(floored_values)) - normalized))
+        
+        # Select the best sum that minimizes the error
+        if error < min_error - 1E-8: # ensure we get the smallest structure
+            min_error = error
+            best_sum = target_sum
+            best_mnk = [m, n, k]
+            best_int_values = floored_values
+
+    return best_int_values.tolist(), best_sum, best_mnk, min_error

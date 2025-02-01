@@ -16,12 +16,12 @@ from pymatgen.io.vasp import Vasprun
 
 from .slurm import squeue_check_av
 
-from pymatgen.io import ase
+from pymatgen.io import ase as pgase
 
 
 
-ase_to_pmg = ase.AseAtomsAdaptor.get_structure
-pmg_to_ase = ase.AseAtomsAdaptor.get_atoms
+ase_to_pmg = pgase.AseAtomsAdaptor.get_structure
+pmg_to_ase = pgase.AseAtomsAdaptor.get_atoms
 
 """how to call the calculator
     pw_calc = PW_calculator()

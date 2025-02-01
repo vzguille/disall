@@ -1,6 +1,23 @@
 import numpy as np
+from matplotlib import font_manager
 import matplotlib.pyplot as plt
 from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
+
+
+def set_font(plt, font_dir = '/scratch/group/arroyave_lab/guillermo.vazquez/FONTS/erewhon-math'):
+    plt.rcParams.update({'font.size': 15})
+    
+    plt.rc('mathtext', fontset="cm")
+    
+    font_dirs = [font_dir]
+    font_files = font_manager.findSystemFonts(fontpaths=font_dirs)
+    
+    for font_file in font_files:
+        font_manager.fontManager.addfont(font_file)
+    
+    # set font
+    plt.rcParams['font.family'] = 'Erewhon Math'
+
 
 def get_lims(xs, ys, panf=0.05):
     
@@ -68,3 +85,27 @@ def parity_plot(gtcl_list,s=5,colors=False,color='blue',unit='',alpha=1, xlabel=
         axs.set_xlabel(xlabel)
     if ylabel != '':
         axs.set_ylabel(ylabel)
+
+def plot_ce(df_ce):
+    df_ce['size'] = df_ce['multicomponent_vector'].apply(lambda x: len(x))
+    df_plot = df_ce[df_ce['size']>1]
+
+    fig, axs = plt.subplots(1, 1, figsize=(7, 5))
+    axs.grid(True)
+    axs.scatter(df_plot['radius'].values, 
+                df_plot['eci'].values, 
+                color= df_plot['size'].apply(lambda x: ['r','b','g'][x-2]).tolist(),
+        s = 8)
+
+
+    custom_legend = [plt.Line2D([0], [0], color=['r','b','g'][i], lw=2, 
+                label='{}'.format(['doublet', 'triplet', 'quadruplet '][i])) 
+                    for i in range(3)]
+        
+    axs.legend(handles=custom_legend, loc='lower right', fontsize = 10)
+
+    axs.set_ylabel(r'ECI ($eV/atom$)', fontsize =13)
+    axs.set_xlabel(r'Cluster radius $\AA$', fontsize =13)
+
+    axs.set_xlim(0,)
+    axs.set_ylim(df_plot['eci'].values.min() - 0.004,df_plot['eci'].values.max() + 0.001)
