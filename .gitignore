@@ -6,6 +6,12 @@ __pycache__/
 # pyiron_calculations
 vasp_0*
 
+#images
+*.png
+
+#data containers 
+*.dc
+
 # C extensions
 *.so
 
