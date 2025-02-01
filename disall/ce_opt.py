@@ -146,7 +146,7 @@ def plot_GP_and_entropy(gp, X, y, scaler, entropy, ideal_entropy = 0, alpha = 0.
     ax1.grid()
     ax1.plot(realX_pred, y_pred, 'k-', label='GP prediction')
     ax1.fill_between(realX_pred.ravel(), y_pred - 1.96 * sigma, y_pred + 1.96 * sigma, alpha=0.2, color='k')
-    ax1.set_xlim(0, 4000)
+    ax1.set_xlim(0, 3500)
     ax1.set_ylim(-0.5, 2.0)
     ax1.set_xlabel('Temps')
     ax1.set_ylabel('Obj. function')
