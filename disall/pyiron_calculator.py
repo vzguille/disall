@@ -108,7 +108,7 @@ class VASP_pyiron_calculator:
             job_function = proj_pyiron.load('vasp_{:015d}'.format(
                                     id
                                     ))
-        print('structure' , structure)
+        
         print('pyiron_status start of loop: {}'.format(job_function.status))
 
         """depending on pyiron status"""
