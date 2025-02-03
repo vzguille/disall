@@ -11,6 +11,8 @@ from disall.observers_icet import MCBinShortRangeOrderObserver
 
 import matplotlib.pyplot as plt
 
+from icet import ClusterExpansion
+
 from mchammer.ensembles import CanonicalEnsemble
 from mchammer.calculators import ClusterExpansionCalculator
 from mchammer import DataContainer
@@ -309,7 +311,7 @@ def run_mc_temp(temp, args, dic_res, ce):
 
 
 
-def opt_mc(args, cluster_expansion):
+def opt_mc(args):
     # try:
     recreate_directory(args['directory_logs'], delete =True)
     log_file_path = args['directory_logs'] + 'log' +'.log'
@@ -322,7 +324,7 @@ def opt_mc(args, cluster_expansion):
     dic_res['ideal_entropy'] = []
     dic_res['objective_function'] = []
     SRO_keys = args['SRO_keys']
-    
+    cluster_expansion = ClusterExpansion.read(args['ce_file'])
     for ij in SRO_keys:
         dic_res[ij] = []
     
@@ -428,21 +430,8 @@ def opt_mc(args, cluster_expansion):
         
         with open(args['directory_logs'] + 'save.pkl', 'wb') as file:
             pickle.dump(dic_res, file)
-        
-
     
-    
-
-    plot_entropy(X_real, dic_res['entropy'], 
-                    ideal_entropy = dic_res['ideal_entropy'][-1], 
-                    save = True,
-                    metadata = {'subset': args['string_concentration'],
-                                'directory': args['directory_logs']})
-    
-    with open(args['directory_logs'] + 'save.pkl', 'wb') as file:
-        pickle.dump(dic_res, file)
     log_message('Done!', log_file_path)
-    # except Exception as e:
-    #     print('error: {}'.format(e))
-    #     log_message('error: {}'.format(e), log_file_path)
+    except Exception as e:
+        log_message('error: {}'.format(e), log_file_path)
 

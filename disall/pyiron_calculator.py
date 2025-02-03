@@ -108,19 +108,24 @@ class VASP_pyiron_calculator:
             job_function = proj_pyiron.load('vasp_{:015d}'.format(
                                     id
                                     ))
+        print('structure' , structure)
         print('pyiron_status start of loop: {}'.format(job_function.status))
 
         """depending on pyiron status"""
 
         if job_function.status == 'initialized':
+            
             job_function.structure = ase_to_pyiron(structure.copy())
+            
             # job function change
             print('PASS to RUN --> id{:015d}'.format(
                     id
                     ))
             # actually run it
+            
             _relax_blank(
                 job_function, dic_parameters)
+            
             if return_job:
                 return job_function
             return {'master_status' : 'SUBMITTED',
@@ -304,11 +309,8 @@ def _relax_blank(job, dic_parameters):
         job.server.queue = job.server.list_queues()[0]
         job.input.incar['NCORE'] = 1
     
-    elif len(job.structure) > 1 and len(job.structure) <= 5:
+    elif len(job.structure) > 1 and len(job.structure) <= 10:
         job.server.queue = job.server.list_queues()[len(job.structure) - 1]
-
-    elif len(job.structure) > 5 and len(job.structure) <= 10:
-        job.server.queue = job.server.list_queues()[2]
     elif len(job.structure) > 10 and len(job.structure) <= 15:
         job.server.queue = job.server.list_queues()[3]
     elif len(job.structure) > 15 and len(job.structure) <= 20:
@@ -333,7 +335,7 @@ def _relax_blank(job, dic_parameters):
             job.structure), kppa=KPPA)
         
         print('SENDING...')
-        time.sleep(2)
+        time.sleep(4)
         # print('KPOINTS file')
         # print(work_str)
         

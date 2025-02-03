@@ -34,8 +34,9 @@ def squeue_check(ID, user = 'guillermo.vazquez', out_print = False):
 
 
 
-def squeue_check_av(ID, user = 'guillermo.vazquez', out_print = False):
-    cmd = ['sacct', '-j', str(ID)]
+def squeue_check_av(ID, out_print = False):
+    username = os.getenv('USER')
+    cmd = ['sacct', '-j', str(ID), '-u', username]
     squeue_output=subprocess.run(cmd, capture_output=True)
     out_work=squeue_output.stdout.split()
 

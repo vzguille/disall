@@ -33,278 +33,169 @@ def run_packet(df_name,
                 num_cores = 10,
                 max_tries = 5,
                 **kwargs):
-    """why we shouldn't run two of these at the same time?
-    if the numbers are repeated they would be looping the same numbers flagging a job node as occupied when 
-    two run_packet shouldn't never be run at the same time so the database doesn't handle 
-    two different loops saving and loading! (only to o when a changed occured?)
     
-    """
-    calculator_label, relaxer = relaxer_dict['calculator_label'], relaxer_dict['relaxer']
-    """ setting up calculator_label  """
     
-    df = df_global.copy(deep = True) # for safekeeping
-    
-    if calculator_label not in df.columns:
-        df[calculator_label] = None
-        df[calculator_label] = df[calculator_label].astype(object)
-        df.attrs[calculator_label] = {}
-        df.attrs[calculator_label]['marked'] = []
-        unmarked = df.index
-    else:
-        unmarked = df.attrs[calculator_label]['unmarked']
-    """ setting to_calculate  """
-    # copy :
-    """
-    if copy_calculated is not None:
-        if copy_calculated not in df.columns:
-            write_log('this relaxer has not been applied yet and cannot be'
-                      ' copied therefore',
-                      log_file=df_name+'.log')
-            return
-        if copy_calculated == calculator_label:
-            write_log('same relaxer selected for copy,'
-                      'please select another relaxer calculated index, or'
-                      ' apply a new relaxer',
-                      log_file=df_name+'.log')
-            return
-        uncalculated_size = list(set(uncalculated_size) & 
-                                 set(df.attrs[copy_calculated]['calculated']))
-    """
-    # if list:
-    if 'id_list' in kwargs:
-        id_list = kwargs['id_list']
-        to_calculate = id_list.copy()
-    else:
-        id_list = None
-    """ setting to_calculate  """
-    
-    # first: packets and sizes
-
-    if 'size_of_packet' in kwargs:
-        size_of_packet = kwargs['size_of_packet']
-    else:
-        size_of_packet = None
-    if 'structure_size' in kwargs:
-        structure_size = kwargs['structure_size']
-    else:
-        structure_size = None
-    # cont
-    
-    if size_of_packet is not None and structure_size is not None:
-        unmarked_at_size = list(
-            set(df[df['size'] == structure_size].index.to_list()) & 
-            set(unmarked))
-        rest_number = len(unmarked_at_size)
-        if rest_number == 0:
-            write_log('no more structures to run of this size', 
-                      log_file=df_name+'.log')
-            return
-        if rest_number > size_of_packet:
-            to_calculate = random.sample(unmarked_at_size, 
-                                         size_of_packet)
-        else:
-            to_calculate = unmarked_at_size
-    
-        write_log('attempting to run :\n {}\n'
-                'of size :\n {}\n'
-                'with calculator :\n {}\n'.format(
-                    str(to_calculate), len(to_calculate), calculator_label),
-                log_file=df_name+'.log')
-    else:
-        pass
+    try:
+        calculator_label, relaxer = relaxer_dict['calculator_label'], relaxer_dict['relaxer']
+        """ setting up calculator_label  """
         
+        df = df_global.copy(deep = True) # for safekeeping
+        
+        if calculator_label not in df.columns:
+            df[calculator_label] = None
+            df[calculator_label] = df[calculator_label].astype(object)
+            df.attrs[calculator_label] = {}
+            df.attrs[calculator_label]['marked'] = []
+            unmarked = df.index
+        else:
+            unmarked = df.attrs[calculator_label]['unmarked']
+        """ setting to_calculate  """
+        # copy :
+        """
+        if copy_calculated is not None:
+            if copy_calculated not in df.columns:
+                write_log('this relaxer has not been applied yet and cannot be'
+                        ' copied therefore',
+                        log_file=df_name+'.log')
+                return
+            if copy_calculated == calculator_label:
+                write_log('same relaxer selected for copy,'
+                        'please select another relaxer calculated index, or'
+                        ' apply a new relaxer',
+                        log_file=df_name+'.log')
+                return
+            uncalculated_size = list(set(uncalculated_size) & 
+                                    set(df.attrs[copy_calculated]['calculated']))
+        """
+        # if list:
+        if 'id_list' in kwargs:
+            id_list = kwargs['id_list']
+            to_calculate = id_list.copy()
+        else:
+            id_list = None
+        """ setting to_calculate  """
+        
+        # first: packets and sizes
 
-    # instead of running we check
-    # print('calculating batch {}'.format(to_calculate))
-    """we need to start by creating a whole system that calculates 
-    the whole indexes 'to_calculate' 
-    by starting a pyiron project of name 'relaxer_dict['calculator_label']'
-    only when one of them passes state to calculated we added to
-    the 'calculated'. We need a higher level symbolism for these labels
-    """
-    
-    busy = 0
-    busy_workers = []
-    RELAXER = relaxer(project_pyiron = calculator_label, input_data = copy.deepcopy(input_data))
-    print('in {} number of cores'.format(num_cores))
-    for i, _ in enumerate(to_calculate):
-        print('#'*10+'< i: {}, to_calculate[i]: {}  >'.format(i, to_calculate[i])+'#'*10)
-        if isinstance(df.loc[to_calculate[i], calculator_label], dict):
+        if 'size_of_packet' in kwargs:
+            size_of_packet = kwargs['size_of_packet']
+        else:
+            size_of_packet = None
+        if 'structure_size' in kwargs:
+            structure_size = kwargs['structure_size']
+        else:
+            structure_size = None
+        # cont
+        
+        if size_of_packet is not None and structure_size is not None:
+            unmarked_at_size = list(
+                set(df[df['size'] == structure_size].index.to_list()) & 
+                set(unmarked))
+            rest_number = len(unmarked_at_size)
+            if rest_number == 0:
+                write_log('no more structures to run of this size', 
+                        log_file=df_name+'.log')
+                return
+            if rest_number > size_of_packet:
+                to_calculate = random.sample(unmarked_at_size, 
+                                            size_of_packet)
+            else:
+                to_calculate = unmarked_at_size
+        
+            write_log('attempting to run :\n {}\n'
+                    'of size :\n {}\n'
+                    'with calculator :\n {}\n'.format(
+                        str(to_calculate), len(to_calculate), calculator_label),
+                    log_file=df_name+'.log')
+        else:
+            pass
             
-            # gets master_status from last run
-            master_status = df.loc[to_calculate[i], calculator_label]['master_status']
-            # options for master status will be FINISHED, RUNNING, TIMEOUT or FAILED
-            # master_status is updated within the calculation function
-            if  master_status == 'RUNNING' or master_status =='PENDING' or master_status == 'SUBMITTED':
-                # update master_status
-                df.at[to_calculate[i], calculator_label].update(
-                    RELAXER.vasp_pyiron_calculation(id = to_calculate[i])
-                )
+
+        # instead of running we check
+        # print('calculating batch {}'.format(to_calculate))
+        """we need to start by creating a whole system that calculates 
+        the whole indexes 'to_calculate' 
+        by starting a pyiron project of name 'relaxer_dict['calculator_label']'
+        only when one of them passes state to calculated we added to
+        the 'calculated'. We need a higher level symbolism for these labels
+        """
+        
+        busy = 0
+        busy_workers = []
+        RELAXER = relaxer(project_pyiron = calculator_label, input_data = copy.deepcopy(input_data))
+        print('in {} number of cores'.format(num_cores))
+        for i, _ in enumerate(to_calculate):
+            print('#'*10+'< i: {}, to_calculate[i]: {}  >'.format(i, to_calculate[i])+'#'*10)
+            if isinstance(df.loc[to_calculate[i], calculator_label], dict):
+                
+                # gets master_status from last run
                 master_status = df.loc[to_calculate[i], calculator_label]['master_status']
-                print('master_status', master_status)
+                # options for master status will be FINISHED, RUNNING, TIMEOUT or FAILED
+                # master_status is updated within the calculation function
                 if  master_status == 'RUNNING' or master_status =='PENDING' or master_status == 'SUBMITTED':
-                    busy += 1
-                    busy_workers.append(to_calculate[i])
-                    if busy >= num_cores:
-                        print('all workers busy, working on {}'.format(busy_workers))
-                        break
-                    continue # next one in the list, this one busy
-            
-            if df.loc[to_calculate[i], calculator_label]['master_status'] == 'FAILED':
-                # check, update if less than 5 (copy and change status to initiated)
-                # else just go to next one
-                if 'try_no' in df.loc[to_calculate[i], calculator_label]:
-                    if df.loc[to_calculate[i], calculator_label]['try_no'] >= max_tries:
-                        print('we tried too many times this structure, last step FAILED')
-                        continue
-                    df.loc[to_calculate[i], calculator_label]['try_no'] += 1
-                    # if try_no already existed we save errors from last
-                    try_no = df.loc[to_calculate[i], calculator_label]['try_no']
-                else:
-                    df.loc[to_calculate[i], calculator_label]['try_no'] = 1
-                    try_no = 1
-
-                ### CHECK ######### if already parsed, if not just skip
-
-                if 'error_count' in df.loc[to_calculate[i], calculator_label]:
-                    df.loc[to_calculate[i], calculator_label]['error_count'] += 1
-                    # if try_no already existed we save errors from last
-                    error_count = df.loc[to_calculate[i], calculator_label]['error_count']
-                else:
-                    df.loc[to_calculate[i], calculator_label]['error_count'] = 1
-                    error_count = 1
-
-                df.loc[to_calculate[i], calculator_label] \
-                    ['error_{:02d}'.format(try_no - 1)] = \
-                        df.loc[to_calculate[i], calculator_label]['error']
-                df.loc[to_calculate[i], calculator_label] \
-                    ['QID_{:02d}'.format(try_no - 1)] = \
-                        df.loc[to_calculate[i], calculator_label]['QID']
-                df.loc[to_calculate[i], calculator_label] \
-                    ['run_time_{:02d}'.format(try_no - 1)] = \
-                        df.loc[to_calculate[i], calculator_label]['run_time']
-
-                df.at[to_calculate[i], calculator_label]['status_{:02d}'.format(try_no - 1)] = 'FAILED'
-                
-                df.at[to_calculate[i], calculator_label]['error_count_{:02d}'.format(try_no - 1)] = error_count
-                df.at[to_calculate[i], calculator_label]['input_data_{:02d}'.format(try_no - 1)] = \
-                    df.at[to_calculate[i], calculator_label]['input_data'].copy()
-                df.at[to_calculate[i], calculator_label]['starting_structure_{:02d}'.format(try_no - 1)] = \
-                    df.at[to_calculate[i], calculator_label]['starting_structure'].copy()
-                
-                if try_no < max_tries:
-                    print('running again try_no:{:02d}'.format(try_no))
-                    """what do we change?
-                    structure scale and k points ?"""
-                    
-                    # first, we copy the aborted job, we do it from a custom function in pyiron_calculator,
-                    # so we don't start the project here
-
-                    update_failed_job(calculator_label, to_calculate[i], try_no)
-                    
-                    # then we just send it again with 
-                    org_structure = df.loc[to_calculate[i], 'init_structure'].copy()
-                    new_structure = org_structure.copy()
-                    new_structure.set_cell(org_structure.cell.array*(1 + error_count*0.025),
-                                            scale_atoms=True)
-                                            
-                    
-                    update_incar = {} #{'-INCAR-ENCUT': 400 + int(20*error_count)},
-                    # we update status, how do we keep track of erros?
+                    # update master_status
                     df.at[to_calculate[i], calculator_label].update(
-                        RELAXER.vasp_pyiron_calculation(
-                        structure = new_structure,
-                        id = to_calculate[i],
-                        update_data = update_incar,
-                        RE = True,
-                        )
+                        RELAXER.vasp_pyiron_calculation(id = to_calculate[i])
                     )
-                    # updating to add input_data and starting_structure
-                    iter_data = copy.deepcopy(input_data)
-                    iter_data.update(update_incar),
-                    df.at[to_calculate[i], calculator_label].update({
-                        'input_data': copy.deepcopy(iter_data),
-                        'starting_structure': new_structure.copy()
-                    })
-                    busy += 1
-                    busy_workers.append(to_calculate[i])
-                    if busy >= num_cores:
-                        print('all workers busy, working on {}'.format(busy_workers))
-                        break
-                    continue
-                else:
-                    print('we tried too many times this structure')
-            
-            if df.loc[to_calculate[i], calculator_label]['master_status'] == 'TIMEOUT':
-                print('this calculation has stopped before its time')
-                if 'try_no' in df.loc[to_calculate[i], calculator_label]:
-                    if df.loc[to_calculate[i], calculator_label]['try_no'] >= max_tries:
-                        print('we tried too many times this structure, last step TIMEOUT')
-                        continue
-                    df.loc[to_calculate[i], calculator_label]['try_no'] += 1
-                    try_no = df.loc[to_calculate[i], calculator_label]['try_no']
-                else:
-                    df.loc[to_calculate[i], calculator_label]['try_no'] = 1
-                    try_no = 1
+                    master_status = df.loc[to_calculate[i], calculator_label]['master_status']
+                    print('master_status', master_status)
+                    if  master_status == 'RUNNING' or master_status =='PENDING' or master_status == 'SUBMITTED':
+                        busy += 1
+                        busy_workers.append(to_calculate[i])
+                        if busy >= num_cores:
+                            print('all workers busy, working on {}'.format(busy_workers))
+                            break
+                        continue # next one in the list, this one busy
                 
-                ### check if already parsed, if not just skip
-                # we read unfinished
+                if df.loc[to_calculate[i], calculator_label]['master_status'] == 'FAILED':
+                    # check, update if less than 5 (copy and change status to initiated)
+                    # else just go to next one
+                    if 'try_no' in df.loc[to_calculate[i], calculator_label]:
+                        if df.loc[to_calculate[i], calculator_label]['try_no'] >= max_tries:
+                            print('we tried too many times this structure, last step FAILED')
+                            continue
+                        df.loc[to_calculate[i], calculator_label]['try_no'] += 1
+                        # if try_no already existed we save errors from last
+                        try_no = df.loc[to_calculate[i], calculator_label]['try_no']
+                    else:
+                        df.loc[to_calculate[i], calculator_label]['try_no'] = 1
+                        try_no = 1
 
+                    ### CHECK ######### if already parsed, if not just skip
 
-                df.loc[to_calculate[i], calculator_label].update(
-                    read_unfinished_job(calculator_label, to_calculate[i]))
-                
-                # then we update, if ionic_steps is less than 1 there is no info to update,
-                # and we just update the number... _{}
+                    if 'error_count' in df.loc[to_calculate[i], calculator_label]:
+                        df.loc[to_calculate[i], calculator_label]['error_count'] += 1
+                        # if try_no already existed we save errors from last
+                        error_count = df.loc[to_calculate[i], calculator_label]['error_count']
+                    else:
+                        df.loc[to_calculate[i], calculator_label]['error_count'] = 1
+                        error_count = 1
 
-                ionic_steps = df.loc[
-                            to_calculate[i], calculator_label]['ionic_steps']
-                
-                # update
-                df.loc[to_calculate[i], calculator_label][
-                    'ionic_steps_{:02d}'.format(try_no - 1)] = df.loc[
-                        to_calculate[i], calculator_label]['ionic_steps']
-                
-                df.at[to_calculate[i], calculator_label][
-                    'status_{:02d}'.format(try_no - 1)] = 'TIMEOUT'
+                    df.loc[to_calculate[i], calculator_label] \
+                        ['error_{:02d}'.format(try_no - 1)] = \
+                            df.loc[to_calculate[i], calculator_label]['error']
+                    df.loc[to_calculate[i], calculator_label] \
+                        ['QID_{:02d}'.format(try_no - 1)] = \
+                            df.loc[to_calculate[i], calculator_label]['QID']
+                    df.loc[to_calculate[i], calculator_label] \
+                        ['run_time_{:02d}'.format(try_no - 1)] = \
+                            df.loc[to_calculate[i], calculator_label]['run_time']
 
-                df.loc[to_calculate[i], calculator_label] \
-                    ['error_{:02d}'.format(try_no - 1)] = \
-                        df.loc[to_calculate[i], calculator_label]['error']
-                df.loc[to_calculate[i], calculator_label] \
-                    ['QID_{:02d}'.format(try_no - 1)] = \
-                        df.loc[to_calculate[i], calculator_label]['QID']
-                df.loc[to_calculate[i], calculator_label] \
-                    ['run_time_{:02d}'.format(try_no - 1)] = \
-                        df.loc[to_calculate[i], calculator_label]['run_time']
-                if 'error_count' in df.loc[to_calculate[i], calculator_label]:
-                    # if try_no already existed we save errors from last
-                    error_count = df.loc[to_calculate[i], calculator_label]['error_count']
-                else:
-                    df.loc[to_calculate[i], calculator_label]['error_count'] = 0
-                    error_count = 0
-
-                
-                df.at[to_calculate[i], calculator_label]['input_data_{:02d}'.format(try_no - 1)] = \
-                    df.at[to_calculate[i], calculator_label]['input_data'].copy()
-                df.at[to_calculate[i], calculator_label]['starting_structure_{:02d}'.format(try_no - 1)] = \
-                    df.at[to_calculate[i], calculator_label]['starting_structure'].copy()
-
-                df.at[to_calculate[i], calculator_label]['error_count_{:02d}'.format(try_no - 1)] = \
-                            df.at[to_calculate[i], calculator_label]['error_count']
-
-
-                if ionic_steps < 2:
+                    df.at[to_calculate[i], calculator_label]['status_{:02d}'.format(try_no - 1)] = 'FAILED'
+                    
+                    df.at[to_calculate[i], calculator_label]['error_count_{:02d}'.format(try_no - 1)] = error_count
+                    df.at[to_calculate[i], calculator_label]['input_data_{:02d}'.format(try_no - 1)] = \
+                        df.at[to_calculate[i], calculator_label]['input_data'].copy()
+                    df.at[to_calculate[i], calculator_label]['starting_structure_{:02d}'.format(try_no - 1)] = \
+                        df.at[to_calculate[i], calculator_label]['starting_structure'].copy()
+                    
                     if try_no < max_tries:
-                        print('TIMEOUT counting as error')
                         print('running again try_no:{:02d}'.format(try_no))
-                        error_count += 1
-
-                        ### redo error_count ###
-                        df.at[to_calculate[i], calculator_label][
-                            'error_count'] = error_count
-                        df.at[to_calculate[i], calculator_label]['error_count_{:02d}'.format(try_no - 1)] = \
-                            df.at[to_calculate[i], calculator_label]['error_count']
+                        """what do we change?
+                        structure scale and k points ?"""
+                        
+                        # first, we copy the aborted job, we do it from a custom function in pyiron_calculator,
+                        # so we don't start the project here
 
                         update_failed_job(calculator_label, to_calculate[i], try_no)
                         
@@ -313,10 +204,10 @@ def run_packet(df_name,
                         new_structure = org_structure.copy()
                         new_structure.set_cell(org_structure.cell.array*(1 + error_count*0.025),
                                                 scale_atoms=True)
-                        # we update status, how do we keep track of erros?
+                                                
                         
                         update_incar = {} #{'-INCAR-ENCUT': 400 + int(20*error_count)},
-
+                        # we update status, how do we keep track of erros?
                         df.at[to_calculate[i], calculator_label].update(
                             RELAXER.vasp_pyiron_calculation(
                             structure = new_structure,
@@ -325,23 +216,221 @@ def run_packet(df_name,
                             RE = True,
                             )
                         )
-                        
                         # updating to add input_data and starting_structure
                         iter_data = copy.deepcopy(input_data)
                         iter_data.update(update_incar),
                         df.at[to_calculate[i], calculator_label].update({
                             'input_data': copy.deepcopy(iter_data),
-                            'starting_structure': new_structure.copy(),
+                            'starting_structure': new_structure.copy()
                         })
                         busy += 1
-                        busy_workers.append(to_calculate[i])                    
+                        busy_workers.append(to_calculate[i])
+                        if busy >= num_cores:
+                            print('all workers busy, working on {}'.format(busy_workers))
+                            break
+                        continue
                     else:
-                        print('we tried too many times this structure, last update TIMEOUT, 0 steps')
+                        print('we tried too many times this structure')
+                
+                if df.loc[to_calculate[i], calculator_label]['master_status'] == 'TIMEOUT':
+                    print('this calculation has stopped before its time')
+                    if 'try_no' in df.loc[to_calculate[i], calculator_label]:
+                        if df.loc[to_calculate[i], calculator_label]['try_no'] >= max_tries:
+                            print('we tried too many times this structure, last step TIMEOUT')
+                            continue
+                        df.loc[to_calculate[i], calculator_label]['try_no'] += 1
+                        try_no = df.loc[to_calculate[i], calculator_label]['try_no']
+                    else:
+                        df.loc[to_calculate[i], calculator_label]['try_no'] = 1
+                        try_no = 1
+                    
+                    ### check if already parsed, if not just skip
+                    # we read unfinished
 
 
+                    df.loc[to_calculate[i], calculator_label].update(
+                        read_unfinished_job(calculator_label, to_calculate[i]))
                     
-                if ionic_steps > 0:
+                    # then we update, if ionic_steps is less than 1 there is no info to update,
+                    # and we just update the number... _{}
+
+                    ionic_steps = df.loc[
+                                to_calculate[i], calculator_label]['ionic_steps']
                     
+                    # update
+                    df.loc[to_calculate[i], calculator_label][
+                        'ionic_steps_{:02d}'.format(try_no - 1)] = df.loc[
+                            to_calculate[i], calculator_label]['ionic_steps']
+                    
+                    df.at[to_calculate[i], calculator_label][
+                        'status_{:02d}'.format(try_no - 1)] = 'TIMEOUT'
+
+                    df.loc[to_calculate[i], calculator_label] \
+                        ['error_{:02d}'.format(try_no - 1)] = \
+                            df.loc[to_calculate[i], calculator_label]['error']
+                    df.loc[to_calculate[i], calculator_label] \
+                        ['QID_{:02d}'.format(try_no - 1)] = \
+                            df.loc[to_calculate[i], calculator_label]['QID']
+                    df.loc[to_calculate[i], calculator_label] \
+                        ['run_time_{:02d}'.format(try_no - 1)] = \
+                            df.loc[to_calculate[i], calculator_label]['run_time']
+                    if 'error_count' in df.loc[to_calculate[i], calculator_label]:
+                        # if try_no already existed we save errors from last
+                        error_count = df.loc[to_calculate[i], calculator_label]['error_count']
+                    else:
+                        df.loc[to_calculate[i], calculator_label]['error_count'] = 0
+                        error_count = 0
+
+                    
+                    df.at[to_calculate[i], calculator_label]['input_data_{:02d}'.format(try_no - 1)] = \
+                        df.at[to_calculate[i], calculator_label]['input_data'].copy()
+                    df.at[to_calculate[i], calculator_label]['starting_structure_{:02d}'.format(try_no - 1)] = \
+                        df.at[to_calculate[i], calculator_label]['starting_structure'].copy()
+
+                    df.at[to_calculate[i], calculator_label]['error_count_{:02d}'.format(try_no - 1)] = \
+                                df.at[to_calculate[i], calculator_label]['error_count']
+
+
+                    if ionic_steps < 2:
+                        if try_no < max_tries:
+                            print('TIMEOUT counting as error')
+                            print('running again try_no:{:02d}'.format(try_no))
+                            error_count += 1
+
+                            ### redo error_count ###
+                            df.at[to_calculate[i], calculator_label][
+                                'error_count'] = error_count
+                            df.at[to_calculate[i], calculator_label]['error_count_{:02d}'.format(try_no - 1)] = \
+                                df.at[to_calculate[i], calculator_label]['error_count']
+
+                            update_failed_job(calculator_label, to_calculate[i], try_no)
+                            
+                            # then we just send it again with 
+                            org_structure = df.loc[to_calculate[i], 'init_structure'].copy()
+                            new_structure = org_structure.copy()
+                            new_structure.set_cell(org_structure.cell.array*(1 + error_count*0.025),
+                                                    scale_atoms=True)
+                            # we update status, how do we keep track of erros?
+                            
+                            update_incar = {} #{'-INCAR-ENCUT': 400 + int(20*error_count)},
+
+                            df.at[to_calculate[i], calculator_label].update(
+                                RELAXER.vasp_pyiron_calculation(
+                                structure = new_structure,
+                                id = to_calculate[i],
+                                update_data = update_incar,
+                                RE = True,
+                                )
+                            )
+                            
+                            # updating to add input_data and starting_structure
+                            iter_data = copy.deepcopy(input_data)
+                            iter_data.update(update_incar),
+                            df.at[to_calculate[i], calculator_label].update({
+                                'input_data': copy.deepcopy(iter_data),
+                                'starting_structure': new_structure.copy(),
+                            })
+                            busy += 1
+                            busy_workers.append(to_calculate[i])                    
+                        else:
+                            print('we tried too many times this structure, last update TIMEOUT, 0 steps')
+
+
+                        
+                    if ionic_steps > 0:
+                        
+                        df.loc[to_calculate[i], calculator_label][
+                            'energy_traj_{:02d}'.format(try_no - 1)] = df.loc[
+                                to_calculate[i], calculator_label]['energy_traj']
+                        df.loc[to_calculate[i], calculator_label][
+                            'force_traj_{:02d}'.format(try_no - 1)] = df.loc[
+                                to_calculate[i], calculator_label]['force_traj']
+                        df.loc[to_calculate[i], calculator_label][
+                            'stress_traj_{:02d}'.format(try_no - 1)] = df.loc[
+                                to_calculate[i], calculator_label]['stress_traj']
+                        df.loc[to_calculate[i], calculator_label][
+                            'structures_traj_{:02d}'.format(try_no - 1)] = df.loc[
+                                to_calculate[i], calculator_label]['structures_traj']
+                        df.loc[to_calculate[i], calculator_label][
+                            'energy_electronic_step_{:02d}'.format(try_no - 1)] = df.loc[
+                                to_calculate[i], calculator_label]['energy_electronic_step']
+                        
+                        
+                        
+
+                        if ionic_steps > 1:
+                            # first, we copy the aborted job, we do it from a custom function in pyiron_calculator,
+                            # so we don't start the project here
+                            if try_no < max_tries:
+                                print('running again try_no:{:02d}'.format(try_no))
+                                update_failed_job(calculator_label, to_calculate[i], try_no)
+                                new_structure = df.loc[to_calculate[i], calculator_label][
+                                    'structures_traj_{:02d}'.format(try_no - 1)][-1].copy()
+                                
+                                # we update status, how do we keep track of erros?
+                                df.at[to_calculate[i], calculator_label].update(
+                                    RELAXER.vasp_pyiron_calculation(
+                                    structure = new_structure,
+                                    id = to_calculate[i],
+                                    RE = True,
+                                    )
+                                )
+                                # updating to add input_data and starting_structure
+                                df.at[to_calculate[i], calculator_label].update({
+                                    'input_data': copy.deepcopy(input_data),
+                                    'starting_structure': new_structure.copy(),
+                                })
+                                
+                                busy += 1
+                                busy_workers.append(to_calculate[i])
+                                
+                                    
+                            else:
+                                print('we tried too many times this structure, last update TIMEOUT')
+                if busy >= num_cores:
+                    print('all workers busy, working on {}'.format(busy_workers))
+                    break
+
+                if df.loc[to_calculate[i], calculator_label]['master_status'] == 'FINISHED':
+                    
+                    if 'try_no' in df.loc[to_calculate[i], calculator_label]:
+                        try_no = df.loc[to_calculate[i], calculator_label]['try_no'] + 1
+                        if 'status_{:02d}'.format(try_no - 1) in df.at[to_calculate[i], calculator_label].keys():
+                            print('this calculation has finished succesfully, already parsed')
+                            continue
+                    else:
+                        df.loc[to_calculate[i], calculator_label]['try_no'] = 0
+                        try_no = 1
+                    ### check if already parsed, if yes just skip
+                    
+                    print('this calculation has finished succesfully, parsing master dictionary...')
+                    if 'error_count' in df.loc[to_calculate[i], calculator_label]:
+                        # if try_no already existed we save errors from last
+                        error_count = df.loc[to_calculate[i], calculator_label]['error_count']
+                    else:
+                        df.loc[to_calculate[i], calculator_label]['error_count'] = 0
+                        error_count = 0
+
+                    df.loc[to_calculate[i], calculator_label] \
+                        ['error_{:02d}'.format(try_no - 1)] = \
+                            df.loc[to_calculate[i], calculator_label]['error']
+                    df.loc[to_calculate[i], calculator_label] \
+                        ['QID_{:02d}'.format(try_no - 1)] = \
+                            df.loc[to_calculate[i], calculator_label]['QID']
+                    df.loc[to_calculate[i], calculator_label] \
+                        ['run_time_{:02d}'.format(try_no - 1)] = \
+                            df.loc[to_calculate[i], calculator_label]['run_time']
+                    
+                    
+                    df.at[to_calculate[i], calculator_label][
+                        'status_{:02d}'.format(try_no - 1)] = 'FINISHED'
+
+                    df.at[to_calculate[i], calculator_label]['error_count_{:02d}'.format(try_no - 1)] = error_count
+                    df.at[to_calculate[i], calculator_label]['input_data_{:02d}'.format(try_no - 1)] = \
+                        df.at[to_calculate[i], calculator_label]['input_data'].copy()
+                    df.at[to_calculate[i], calculator_label]['starting_structure_{:02d}'.format(try_no - 1)] = \
+                        df.at[to_calculate[i], calculator_label]['starting_structure'].copy()
+                        
                     df.loc[to_calculate[i], calculator_label][
                         'energy_traj_{:02d}'.format(try_no - 1)] = df.loc[
                             to_calculate[i], calculator_label]['energy_traj']
@@ -354,156 +443,76 @@ def run_packet(df_name,
                     df.loc[to_calculate[i], calculator_label][
                         'structures_traj_{:02d}'.format(try_no - 1)] = df.loc[
                             to_calculate[i], calculator_label]['structures_traj']
+
+                    df.loc[to_calculate[i], calculator_label][
+                        'ionic_steps_{:02d}'.format(try_no - 1)] = df.loc[
+                            to_calculate[i], calculator_label]['ionic_steps']
+
                     df.loc[to_calculate[i], calculator_label][
                         'energy_electronic_step_{:02d}'.format(try_no - 1)] = df.loc[
                             to_calculate[i], calculator_label]['energy_electronic_step']
-                    
-                    
-                    
-
-                    if ionic_steps > 1:
-                        # first, we copy the aborted job, we do it from a custom function in pyiron_calculator,
-                        # so we don't start the project here
-                        if try_no < max_tries:
-                            print('running again try_no:{:02d}'.format(try_no))
-                            update_failed_job(calculator_label, to_calculate[i], try_no)
-                            new_structure = df.loc[to_calculate[i], calculator_label][
-                                'structures_traj_{:02d}'.format(try_no - 1)][-1].copy()
-                            
-                            # we update status, how do we keep track of erros?
-                            df.at[to_calculate[i], calculator_label].update(
-                                RELAXER.vasp_pyiron_calculation(
-                                structure = new_structure,
-                                id = to_calculate[i],
-                                RE = True,
-                                )
-                            )
-                            # updating to add input_data and starting_structure
-                            df.at[to_calculate[i], calculator_label].update({
-                                'input_data': copy.deepcopy(input_data),
-                                'starting_structure': new_structure.copy(),
-                            })
-                            
-                            busy += 1
-                            busy_workers.append(to_calculate[i])
-                            
-                                
-                        else:
-                            print('we tried too many times this structure, last update TIMEOUT')
-            if busy >= num_cores:
-                print('all workers busy, working on {}'.format(busy_workers))
-                break
-
-            if df.loc[to_calculate[i], calculator_label]['master_status'] == 'FINISHED':
-                
-                if 'try_no' in df.loc[to_calculate[i], calculator_label]:
-                    try_no = df.loc[to_calculate[i], calculator_label]['try_no'] + 1
-                    if 'status_{:02d}'.format(try_no - 1) in df.at[to_calculate[i], calculator_label].keys():
-                        print('this calculation has finished succesfully, already parsed')
-                        continue
-                else:
-                    df.loc[to_calculate[i], calculator_label]['try_no'] = 0
-                    try_no = 1
-                ### check if already parsed, if yes just skip
-                
-                print('this calculation has finished succesfully, parsing master dictionary...')
-                if 'error_count' in df.loc[to_calculate[i], calculator_label]:
-                    # if try_no already existed we save errors from last
-                    error_count = df.loc[to_calculate[i], calculator_label]['error_count']
-                else:
-                    df.loc[to_calculate[i], calculator_label]['error_count'] = 0
-                    error_count = 0
-
-                df.loc[to_calculate[i], calculator_label] \
-                    ['error_{:02d}'.format(try_no - 1)] = \
-                        df.loc[to_calculate[i], calculator_label]['error']
-                df.loc[to_calculate[i], calculator_label] \
-                    ['QID_{:02d}'.format(try_no - 1)] = \
-                        df.loc[to_calculate[i], calculator_label]['QID']
-                df.loc[to_calculate[i], calculator_label] \
-                    ['run_time_{:02d}'.format(try_no - 1)] = \
-                        df.loc[to_calculate[i], calculator_label]['run_time']
-                
-                
-                df.at[to_calculate[i], calculator_label][
-                    'status_{:02d}'.format(try_no - 1)] = 'FINISHED'
-
-                df.at[to_calculate[i], calculator_label]['error_count_{:02d}'.format(try_no - 1)] = error_count
-                df.at[to_calculate[i], calculator_label]['input_data_{:02d}'.format(try_no - 1)] = \
-                    df.at[to_calculate[i], calculator_label]['input_data'].copy()
-                df.at[to_calculate[i], calculator_label]['starting_structure_{:02d}'.format(try_no - 1)] = \
-                    df.at[to_calculate[i], calculator_label]['starting_structure'].copy()
-                    
-                df.loc[to_calculate[i], calculator_label][
-                    'energy_traj_{:02d}'.format(try_no - 1)] = df.loc[
-                        to_calculate[i], calculator_label]['energy_traj']
-                df.loc[to_calculate[i], calculator_label][
-                    'force_traj_{:02d}'.format(try_no - 1)] = df.loc[
-                        to_calculate[i], calculator_label]['force_traj']
-                df.loc[to_calculate[i], calculator_label][
-                    'stress_traj_{:02d}'.format(try_no - 1)] = df.loc[
-                        to_calculate[i], calculator_label]['stress_traj']
-                df.loc[to_calculate[i], calculator_label][
-                    'structures_traj_{:02d}'.format(try_no - 1)] = df.loc[
-                        to_calculate[i], calculator_label]['structures_traj']
-
-                df.loc[to_calculate[i], calculator_label][
-                    'ionic_steps_{:02d}'.format(try_no - 1)] = df.loc[
-                        to_calculate[i], calculator_label]['ionic_steps']
-
-                df.loc[to_calculate[i], calculator_label][
-                    'energy_electronic_step_{:02d}'.format(try_no - 1)] = df.loc[
-                        to_calculate[i], calculator_label]['energy_electronic_step']
-                # check and update
-                continue
-        else:
-            # if the dataframe block is empty, initialize(only the first time)
-            # print(input_data)
-            if len(df.loc[to_calculate[i], 'init_structure']) == 1:
-                update_incar = {'-INCAR-NCORE': 1,}
+                    # check and update
+                    time.sleep(0.5)
+                    continue
             else:
-                update_incar = {}
-            
-            df.at[to_calculate[i], calculator_label] = RELAXER.vasp_pyiron_calculation(structure = df.loc[
-                to_calculate[i], 'init_structure'],
-                id = to_calculate[i],
-                update_data = update_incar
-                )
-            # updating to add input_data and starting_structure
-            iter_data = copy.deepcopy(input_data)
-            iter_data.update(update_incar)
-            # print(iter_data)
-            df.at[to_calculate[i], calculator_label].update({
-                'input_data': copy.deepcopy(iter_data),
-                'starting_structure': df.loc[
-                to_calculate[i], 'init_structure'].copy()
-            })
+                # if the dataframe block is empty, initialize(only the first time)
+                # print(input_data)
+                if len(df.loc[to_calculate[i], 'init_structure']) == 1:
+                    update_incar = {'-INCAR-NCORE': 1,}
+                else:
+                    update_incar = {}
+                
+                df.at[to_calculate[i], calculator_label] = RELAXER.vasp_pyiron_calculation(structure = df.loc[
+                    to_calculate[i], 'init_structure'],
+                    id = to_calculate[i],
+                    update_data = update_incar
+                    )
+                # updating to add input_data and starting_structure
+                iter_data = copy.deepcopy(input_data)
+                iter_data.update(update_incar)
+                # print(iter_data)
+                df.at[to_calculate[i], calculator_label].update({
+                    'input_data': copy.deepcopy(iter_data),
+                    'starting_structure': df.loc[
+                    to_calculate[i], 'init_structure'].copy()
+                })
 
-            busy += 1
-            busy_workers.append(to_calculate[i])
-            if busy >= num_cores:
-                print('all workers busy, working on {}'.format(busy_workers))
-                break
-    if len(busy_workers) < num_cores:
-        print('current workers working on {}'.format(busy_workers))
-    df.attrs[calculator_label]['unmarked'] = list(
-        set(unmarked) - set(to_calculate))
+                busy += 1
+                busy_workers.append(to_calculate[i])
+                if busy >= num_cores:
+                    print('all workers busy, working on {}'.format(busy_workers))
+                    break
+        if len(busy_workers) < num_cores:
+            print('current workers working on {}'.format(busy_workers))
+        df.attrs[calculator_label]['unmarked'] = list(
+            set(unmarked) - set(to_calculate))
 
-    df.attrs[calculator_label]['marked'] += to_calculate
-    df.attrs[calculator_label]['marked'] = list(
-        set(df.attrs[calculator_label]['marked']))
-    
-    # we leave zipping for later, right now if there's an error
-    # it'd run the loop again since it won't save previous runs
-    # df.loc[to_calculate, calculator_label]= [3,3,3]
-    # print(df.loc[to_calculate, calculator_label])
-    # ERROR
-    print('saving...')
-    df.to_pickle(df_name+'.pkl')
-    print('saved succesfully')
-    df_global = df.copy(deep = True)
+        df.attrs[calculator_label]['marked'] += to_calculate
+        df.attrs[calculator_label]['marked'] = list(
+            set(df.attrs[calculator_label]['marked']))
+        
+        # we leave zipping for later, right now if there's an error
+        # it'd run the loop again since it won't save previous runs
+        # df.loc[to_calculate, calculator_label]= [3,3,3]
+        # print(df.loc[to_calculate, calculator_label])
+        # ERROR
 
-    return df_global
+
+        # print('test')
+        # print()
+        # df.at[509937, calculator_label] = {'try': 1}
+
+        # print(df.loc[509937, 'first_00'])
+        # print(df_global.loc[509937,'first_00'])
+        # return
+        print('saving...')
+        df.to_pickle(df_name+'.pkl')
+        print('saved succesfully')
+        df_global = df.copy(deep = True)
+        return df
+    except Exception as e:
+        print(e)
+        return df_global
 
 
 # else: 
